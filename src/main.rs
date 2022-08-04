@@ -1,5 +1,4 @@
-mod sinks;
-mod sources;
+mod source;
 
 fn main() {
     println!("Hello, world!");
