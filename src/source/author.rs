@@ -23,7 +23,7 @@ impl fmt::Display for UserName {
     }
 }
 
-#[derive(Builder, Debug, Eq, Default)]
+#[derive(Builder, Debug, Eq, Default, Clone)]
 #[builder(setter(into))]
 pub struct Author {
     #[builder(setter(into, strip_option), default)]

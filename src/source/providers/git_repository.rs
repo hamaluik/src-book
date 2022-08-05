@@ -1,13 +1,14 @@
 use super::SourceProvider;
 use crate::source::{Author, AuthorBuilder, Source, SourceFile};
 use anyhow::{anyhow, Context, Result};
+use globset::{GlobMatcher, GlobSet};
 use ignore::Walk;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct GitRepository {
-    root: PathBuf,
+    _root: PathBuf,
     title: String,
     authors: Vec<Author>,
     source_files: Vec<SourceFile>,
@@ -15,17 +16,7 @@ pub struct GitRepository {
 
 impl GitRepository {
     /// Load a git repository starting from the root folder
-    /// allow is a list of callbacks, where the file will be included if ANY of the callbacks
-    /// return true
-    /// block is a list of callbacks, where the file will NOT be included if ANY of the callbacks
-    /// return true
-    /// if allow is empty and block is empty, all files (following .gitignore) (which are text
-    /// files) will be included
-    pub fn load<P: Into<PathBuf>>(
-        root: P,
-        allow: Vec<fn(&Path) -> bool>,
-        block: Vec<fn(&Path) -> bool>,
-    ) -> Result<GitRepository> {
+    pub fn load<P: Into<PathBuf>>(root: P, block: Vec<GlobMatcher>) -> Result<GitRepository> {
         let root: PathBuf = root.into();
 
         // make sure the root is a path
@@ -135,18 +126,11 @@ impl GitRepository {
                 Ok(())
             };
 
-            'walk: for entry in Walk::new(&root) {
+            for entry in Walk::new(&root) {
                 let entry = entry.with_context(|| "Failed to walk repository directory")?;
 
-                if allow.is_empty() && block.is_empty() {
-                    push_path(entry.into_path())?;
-                    continue 'walk;
-                }
-
-                let allowed = allow.iter().any(|&allow| allow(entry.path()));
-                let blocked = block.iter().any(|&block| block(entry.path()));
-
-                if allowed && !blocked {
+                let blocked = block.iter().any(|glob| glob.is_match(entry.path()));
+                if !blocked {
                     push_path(entry.into_path())?;
                 }
             }
@@ -155,7 +139,7 @@ impl GitRepository {
         };
 
         Ok(GitRepository {
-            root,
+            _root: root,
             title,
             authors,
             source_files,
@@ -165,23 +149,32 @@ impl GitRepository {
 
 impl SourceProvider for GitRepository {
     fn apply(&self, source: &mut Source) -> Result<()> {
-        todo!()
+        if source.title.is_none() {
+            source.title = Some(self.title.clone());
+        }
+
+        for author in self.authors.iter() {
+            source.authors.push(author.to_owned());
+        }
+
+        for source_file in self.source_files.iter() {
+            source.source_files.push(source_file.to_owned());
+        }
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod test {
+    use globset::Glob;
+
     use super::GitRepository;
 
     #[test]
     fn repository_adds_files() {
-        use std::ffi::OsStr;
-        let repo = GitRepository::load(
-            ".",
-            vec![|p| p.extension().map(OsStr::to_str).flatten() == Some("rs")],
-            vec![],
-        )
-        .expect("can load repository");
+        let repo = GitRepository::load(".", vec![Glob::new("*.lock").unwrap().compile_matcher()])
+            .expect("can load repository");
         assert_ne!(repo.source_files.len(), 0);
     }
 }

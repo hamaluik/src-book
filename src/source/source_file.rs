@@ -1,7 +1,7 @@
 use std::cmp::Ordering;
 use std::path::PathBuf;
 
-#[derive(PartialEq, Eq, Debug)]
+#[derive(PartialEq, Eq, Debug, Clone)]
 pub enum SourceFile {
     /// The source file is a file on the local hard drive
     Path(PathBuf),
