@@ -10,6 +10,7 @@ pub struct UserName {
 }
 
 impl UserName {
+    #[allow(unused)]
     pub fn new<S1: ToString, S2: ToString>(service: S1, user_name: S2) -> UserName {
         UserName {
             service: service.to_string(),

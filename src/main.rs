@@ -1,4 +1,4 @@
-use crate::source::{Author, GitRepository};
+use crate::source::GitRepository;
 use anyhow::{anyhow, Context, Result};
 use cli::Cli;
 use dialoguer::Input;
@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use source::{AuthorBuilder, Source};
 use std::cmp::Ordering;
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::ExitCode;
 
 mod cli;

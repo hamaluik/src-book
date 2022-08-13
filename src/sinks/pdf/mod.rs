@@ -4,6 +4,7 @@ use pdf_gen::layout::Margins;
 use pdf_gen::pdf_writer::types::LineCapStyle;
 use pdf_gen::pdf_writer::Content;
 use pdf_gen::*;
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{FontStyle, Style, ThemeSet};
@@ -64,13 +65,20 @@ impl PDF {
         // add a blank page after the title page so we start on the right
         doc.add_page(Page::new(pagesize::HALF_LETTER, None));
 
+        let mut source_pages: HashMap<PathBuf, usize> = HashMap::new();
+        let mut page_offset = doc.pages.len();
         for file in source.source_files.iter() {
+            source_pages.insert(file.clone(), doc.pages.len() - page_offset);
             self.render_source_file(&mut doc, file)
                 .with_context(|| format!("Failed to render source file {}!", file.display()))?;
         }
 
+        page_offset += self
+            .render_toc(&mut doc, page_offset, source_pages)
+            .with_context(|| "Failed to render table of contents")?;
+
         // add page numbers
-        for (pi, page) in doc.pages.iter_mut().skip(2).enumerate() {
+        for (pi, page) in doc.pages.iter_mut().skip(page_offset).enumerate() {
             let text = format!("{}", pi + 1);
             let coords: (Pt, Pt) = if pi % 2 == 0 {
                 (
@@ -168,6 +176,88 @@ impl PDF {
         Ok(())
     }
 
+    fn render_toc(
+        &self,
+        doc: &mut Document,
+        skip_pages: usize,
+        source_pages: HashMap<PathBuf, usize>,
+    ) -> Result<usize> {
+        const CONTENTS_SIZE: Pt = Pt(24.0);
+        const ENTRY_SIZE: Pt = Pt(12.0);
+
+        let height_contents = doc.fonts[1].line_height(CONTENTS_SIZE);
+        let height_entry = doc.fonts[0].line_height(ENTRY_SIZE);
+        let descent_entry = doc.fonts[0].descent(ENTRY_SIZE);
+
+        let entry_font = SpanFont {
+            index: 0,
+            size: ENTRY_SIZE,
+        };
+
+        let mut entries: Vec<(PathBuf, usize)> = source_pages.into_iter().collect();
+        entries.sort_by_key(|(_, p)| *p);
+
+        let mut pages: Vec<Page> = Vec::default();
+        while !entries.is_empty() {
+            let mut page = Page::new(pagesize::HALF_LETTER, Some(Margins::all(In(0.5).into())));
+
+            let start = if pages.is_empty() {
+                layout::baseline_start(&page, &doc.fonts[1], CONTENTS_SIZE)
+            } else {
+                layout::baseline_start(&page, &doc.fonts[0], ENTRY_SIZE)
+            };
+
+            let (x, mut y) = start;
+            if pages.is_empty() {
+                page.add_span(SpanLayout {
+                    text: "Contents".to_string(),
+                    font: SpanFont {
+                        index: 1,
+                        size: CONTENTS_SIZE,
+                    },
+                    colour: colours::BLACK,
+                    coords: (x, y),
+                });
+                y -= height_contents;
+            }
+
+            'page: loop {
+                if y < page.content_box.y1 + descent_entry || entries.is_empty() {
+                    break 'page;
+                }
+
+                let entry = entries.remove(0);
+                page.add_span(SpanLayout {
+                    text: entry.0.display().to_string(),
+                    font: entry_font,
+                    colour: colours::BLACK,
+                    coords: (x, y),
+                });
+                let pagenum = format!("{}", entry.1 + 1);
+                let pagenum_width = layout::width_of_text(&pagenum, &doc.fonts[1], ENTRY_SIZE);
+                page.add_span(SpanLayout {
+                    text: pagenum,
+                    font: entry_font,
+                    colour: colours::BLACK,
+                    coords: (page.content_box.x2 - pagenum_width, y),
+                });
+                y -= height_entry;
+            }
+
+            pages.push(page);
+        }
+
+        // add a blank page after the contents to keep the booklet even
+        if pages.len() % 2 == 1 {
+            pages.push(Page::new(pagesize::HALF_LETTER, None));
+        }
+
+        let added_page_count = pages.len();
+        doc.pages.splice(skip_pages..skip_pages, pages);
+
+        Ok(added_page_count)
+    }
+
     fn render_source_file(&self, doc: &mut Document, path: &Path) -> Result<()> {
         // read the contents
         let contents = std::fs::read_to_string(path)
@@ -181,6 +271,12 @@ impl PDF {
                 .unwrap_or_default()
                 .unwrap_or_default(),
         );
+
+        let text_size: Pt = if path.display().to_string() == "LICENSE" {
+            Pt(7.0)
+        } else {
+            Pt(10.0)
+        };
 
         // start the set of pages with the path
         let mut text: Vec<(String, Colour, SpanFont)> = Vec::default();
@@ -220,36 +316,32 @@ impl PDF {
                         colour,
                         SpanFont {
                             index,
-                            size: Pt(10.0),
+                            size: text_size,
                         },
                     ));
                 }
             }
         } else {
             // render without syntax highlighting
-            for (i, line) in contents.lines().enumerate() {
-                text.push((
-                    format!("{:>4}  ", i + 1),
-                    Colour::new_grey(0.75),
-                    SpanFont {
-                        index: 0,
-                        size: Pt(8.0),
-                    },
-                ));
-
+            // note: don't show line numbers on these files
+            for line in contents.lines() {
                 text.push((
                     format!("{}\n", line),
                     colours::BLACK,
                     SpanFont {
                         index: 0,
-                        size: Pt(10.0),
+                        size: text_size,
                     },
                 ));
             }
         }
 
         // and render it into pages
-        let wrap_width = layout::width_of_text("      ", &doc.fonts[0], Pt(8.0));
+        let wrap_width = if syntax.is_some() {
+            layout::width_of_text("      ", &doc.fonts[0], Pt(8.0))
+        } else {
+            Pt(0.0)
+        };
         while !text.is_empty() {
             let margins = Margins::trbl(
                 In(0.25).into(),
@@ -261,7 +353,7 @@ impl PDF {
             let page_size = pdf_gen::pagesize::HALF_LETTER;
 
             let mut page = Page::new(page_size, Some(margins));
-            let start = layout::baseline_start(&page, &doc.fonts[0], Pt(10.0));
+            let start = layout::baseline_start(&page, &doc.fonts[0], text_size);
             let start = (
                 start.0,
                 start.1 - (doc.fonts[0].line_height(Pt(12.0)) * 2.0),
