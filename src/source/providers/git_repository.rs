@@ -8,10 +8,10 @@ use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
 pub struct GitRepository {
-    _root: PathBuf,
-    title: String,
-    authors: Vec<Author>,
-    source_files: Vec<SourceFile>,
+    pub _root: PathBuf,
+    pub title: String,
+    pub authors: Vec<Author>,
+    pub source_files: Vec<SourceFile>,
 }
 
 impl GitRepository {

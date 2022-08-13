@@ -1,8 +1,9 @@
 use derive_builder::Builder;
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct UserName {
     pub service: String,
     pub user_name: String,
@@ -23,9 +24,11 @@ impl fmt::Display for UserName {
     }
 }
 
-#[derive(Builder, Debug, Eq, Default, Clone)]
+#[derive(Builder, Debug, Eq, Default, Clone, Serialize, Deserialize)]
 #[builder(setter(into))]
 pub struct Author {
+    #[builder(setter(each(name = "user_name", into)), default)]
+    pub user_names: Vec<UserName>,
     #[builder(setter(into, strip_option), default)]
     pub name: Option<String>,
     #[builder(setter(into, strip_option), default)]
@@ -36,8 +39,6 @@ pub struct Author {
     pub role: Option<String>,
     #[builder(default)]
     pub prominence: usize,
-    #[builder(setter(each(name = "user_name", into)), default)]
-    pub user_names: Vec<UserName>,
 }
 
 impl fmt::Display for Author {

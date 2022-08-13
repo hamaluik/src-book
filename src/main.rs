@@ -1,61 +1,117 @@
-use crate::source::GitRepository;
+use crate::sinks::Render;
+use crate::source::{Author, GitRepository, SourceFile};
 use anyhow::{anyhow, Context, Result};
 use cli::Cli;
 use dialoguer::Input;
 use dialoguer::{theme::ColorfulTheme, Confirm};
-use source::{AuthorBuilder, Source, SourceProvider};
+use serde::{Deserialize, Serialize};
+use source::{AuthorBuilder, Source};
+use std::cmp::Ordering;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::process::ExitCode;
 
 mod cli;
+mod sinks;
 mod source;
 
-#[derive(Debug, Default)]
-struct Configuration {
-    source: Source,
+#[derive(Deserialize, Serialize)]
+struct PDFConfiguration {
+    output: PathBuf,
+    /*tab_size: usize,
+    reduce_spaces: bool,
+    native_tab_size: usize,
+    page_width_in: f32,
+    page_height_in: f32,
+    margin_top_in: f32,*/
 }
 
-fn main() -> Result<()> {
-    use clap::Parser;
-    let mut cli = Cli::parse();
+#[derive(Deserialize, Serialize)]
+struct Configuration {
+    title: String,
+    files: Vec<PathBuf>,
+    authors: Vec<Author>,
+    pdf: Option<PDFConfiguration>,
+}
 
-    let theme = ColorfulTheme {
-        ..ColorfulTheme::default()
-    };
-
-    let mut config: Configuration = Configuration::default();
-
-    if let Some(title) = cli.title.take() {
-        config.source.title = Some(title);
-    } else if !cli.no_prompt {
-        let title = Input::with_theme(&theme)
-            .with_prompt("Book title")
-            .default("".to_string())
-            .allow_empty(true)
-            .interact()
-            .with_context(|| "Failed to obtain title")?;
-        if !title.is_empty() {
-            config.source.title = Some(title);
+impl From<&Configuration> for Source {
+    fn from(config: &Configuration) -> Self {
+        Source {
+            title: Some(config.title.clone()),
+            authors: config.authors.clone(),
+            licenses: Vec::default(),
+            source_files: config
+                .files
+                .iter()
+                .map(PathBuf::clone)
+                .map(SourceFile::Path)
+                .collect(),
         }
     }
-    for (i, author) in cli.authors.into_iter().enumerate() {
-        config.source.authors.push(
-            AuthorBuilder::default()
-                .identifier(author)
-                .prominence(usize::MAX - i)
-                .build()
-                .with_context(|| "Failed to build author")?,
-        );
-    }
-    config.source.source_files = cli.source_files.iter().map(Into::into).collect();
+}
 
-    let repo = if cli.git_repository.is_some() {
-        cli.git_repository.take()
-    } else if !cli.no_prompt {
-        if Confirm::with_theme(&theme)
-            .with_prompt("Do you wish to load data from a repository directory?")
-            .interact()
-            .with_context(|| "Failed to interact")?
-        {
+fn sort_paths(root: Option<PathBuf>, mut a: Vec<&OsStr>, mut b: Vec<&OsStr>) -> Ordering {
+    match (a.is_empty(), b.is_empty()) {
+        (true, true) => return Ordering::Equal,
+        (true, false) => return Ordering::Less,
+        (false, true) => return Ordering::Greater,
+        _ => {}
+    }
+
+    let root_a = a.remove(0);
+    let root_b = b.remove(0);
+
+    let root_a = match &root {
+        Some(root) => root.join(root_a),
+        None => PathBuf::from(root_a),
+    };
+    let root_b = match &root {
+        Some(root) => root.join(root_b),
+        None => PathBuf::from(root_b),
+    };
+
+    match (root_a.is_file(), root_b.is_file()) {
+        (true, true) => return root_a.cmp(&root_b),
+        (true, false) => return Ordering::Less,
+        (false, true) => return Ordering::Greater,
+        _ => {}
+    }
+
+    match root_a.cmp(&root_b) {
+        Ordering::Equal => match a.len().cmp(&b.len()) {
+            Ordering::Equal => sort_paths(Some(root_a), a, b),
+            o => o,
+        },
+        o => o,
+    }
+}
+
+fn main() -> ExitCode {
+    if let Err(e) = try_main() {
+        eprintln!("{}: {e:#}", console::style("Error").red());
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+fn try_main() -> Result<()> {
+    use clap::Parser;
+    let cli = Cli::parse();
+
+    match &cli.command {
+        cli::Commands::Config => {
+            let theme = ColorfulTheme {
+                ..ColorfulTheme::default()
+            };
+
+            let title = Input::with_theme(&theme)
+                .with_prompt("Book title")
+                .default("".to_string())
+                .allow_empty(false)
+                .interact()
+                .with_context(|| "Failed to obtain title")?;
+
             let repo = Input::with_theme(&theme)
                 .with_prompt("Repository directory")
                 .default(".".to_string())
@@ -65,18 +121,9 @@ fn main() -> Result<()> {
             if !repo.exists() || !repo.is_dir() {
                 return Err(anyhow!("Path '{}' isn't a directory!", repo.display()));
             }
-            Some(repo)
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-    if let Some(repo) = repo {
-        use globset::{Glob, GlobMatcher};
-        let mut block_globs: Vec<GlobMatcher> = Vec::default();
+            use globset::{Glob, GlobMatcher};
+            let mut block_globs: Vec<GlobMatcher> = Vec::default();
 
-        if !cli.no_prompt {
             if Confirm::with_theme(&theme)
                 .with_prompt(
                     "Do you wish to specifically block some files allowed by your .gitignore?",
@@ -108,18 +155,120 @@ fn main() -> Result<()> {
                     block_globs.push(glob);
                 }
             }
+
+            let repo = GitRepository::load(&repo, block_globs)
+                .with_context(|| format!("Failed to load git repository at {}", repo.display()))?;
+
+            let mut authors = repo.authors.clone();
+
+            println!(
+                "Authors: [{}]",
+                authors
+                    .iter()
+                    .map(|author| author.to_string())
+                    .collect::<Vec<String>>()
+                    .join("], [")
+            );
+            if Confirm::with_theme(&theme)
+                .with_prompt("Do you wish to add more authors?")
+                .interact()?
+            {
+                let mut author_i = 0;
+                'authors: loop {
+                    let author: String = Input::with_theme(&theme)
+                        .with_prompt("Additional author (leave blank to move on)")
+                        .allow_empty(true)
+                        .interact()?;
+                    if author.trim().is_empty() {
+                        break 'authors;
+                    }
+                    authors.push(
+                        AuthorBuilder::default()
+                            .identifier(author)
+                            .prominence(usize::MAX - author_i)
+                            .build()
+                            .with_context(|| "Failed to build author")?,
+                    );
+                    author_i += 1;
+                }
+            }
+            authors.sort();
+
+            let mut pdf = None;
+            if Confirm::with_theme(&theme)
+                .with_prompt("Do you want to render to PDF?")
+                .interact()?
+            {
+                let output: String = Input::with_theme(&theme)
+                    .with_prompt("Output pdf file")
+                    .allow_empty(false)
+                    .interact()?;
+                let mut output = PathBuf::from(output);
+                let ext = output
+                    .extension()
+                    .map(std::ffi::OsStr::to_ascii_lowercase)
+                    .unwrap_or_default();
+                if ext != *"pdf" {
+                    output.set_extension("pdf");
+                }
+
+                pdf = Some(PDFConfiguration { output });
+            }
+
+            let mut files: Vec<PathBuf> = repo
+                .source_files
+                .iter()
+                .map(SourceFile::path)
+                .map(Path::to_path_buf)
+                .collect();
+            files.sort_by(|a, b| {
+                let a: Vec<_> = a.iter().collect();
+                let b: Vec<_> = b.iter().collect();
+                sort_paths(None, a, b)
+            });
+
+            let config = Configuration {
+                title,
+                authors,
+                files,
+                pdf,
+            };
+
+            let config = toml::to_string_pretty(&config)
+                .with_context(|| "Failed to convert configuration to TOML")?;
+
+            let config_path = PathBuf::from("src-book.toml");
+            if config_path.exists()
+                && !Confirm::with_theme(&theme)
+                    .with_prompt("src-book.toml already exists, do you want to override it?")
+                    .interact()?
+            {
+                println!("Configuration:");
+                println!("{}", config);
+            } else {
+                std::fs::write("src-book.toml", config)
+                    .with_context(|| "Failed to write configuration file")?;
+                println!("src-book.toml written!");
+            }
         }
+        cli::Commands::Render => {
+            println!("Loading configuration...");
+            let contents = std::fs::read_to_string("src-book.toml")
+                .with_context(|| "Failed to load src-book.toml contents")?;
+            let config = toml::from_str(&contents).with_context(|| "Failed to parse TOML")?;
 
-        let repo = GitRepository::load(&repo, block_globs)
-            .with_context(|| format!("Failed to load git repository at {}", repo.display()))?;
+            let source: Source = Source::from(&config);
 
-        repo.apply(&mut config.source)
-            .with_context(|| "Failed to load information from repository")?;
+            if let Some(pdf) = &config.pdf {
+                println!("Rendering PDF to {}...", pdf.output.display());
+                let pdf = sinks::PDF::new(&pdf.output);
+                pdf.render(&source)
+                    .with_context(|| "Failed to render PDF")?;
+            }
+
+            println!("Done!");
+        }
     }
-
-    // TODO: license
-
-    println!("Config: {config:#?}");
 
     Ok(())
 }

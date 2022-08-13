@@ -1,0 +1,25 @@
+title = 'src-book'
+files = [
+    'README.md',
+    'LICENSE',
+    'Cargo.toml',
+    'src/main.rs',
+    'src/cli.rs',
+    'src/source/mod.rs',
+    'src/source/author.rs',
+    'src/source/source_file.rs',
+    'src/source/providers/git_repository.rs',
+    'src/source/providers/mod.rs',
+    'src/sinks/mod.rs',
+    'src/sinks/pdf/mod.rs',
+    'src/sinks/xelatex/mod.rs',
+]
+
+[[authors]]
+user_names = []
+name = 'Kenton Hamaluik'
+email = 'kenton@hamaluik.ca'
+prominence = 3
+
+[pdf]
+output = 'src-book.pdf'

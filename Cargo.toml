@@ -12,7 +12,6 @@ git2 = "0.14"
 ignore = "0.4"
 derive_builder = "0.11"
 syntect = "5.0"
-printpdf = "0.5"
 dialoguer = "0.10"
 console = "0.15"
 indicatif = "0.16"
@@ -21,3 +20,7 @@ log = "0.4"
 reqwest = { version = "0.11", default-features = false, features = [ "blocking" ] }
 clap = { version = "3.2", features = ["derive", "cargo", "env", "unicode", "wrap_help"] }
 globset = "0.4"
+#tinytemplate = "1.2"
+pdf-gen = { path = "../pdf-gen" }
+toml = "0.5"
+serde = { version = "1", features = ["derive"] }

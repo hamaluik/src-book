@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum SourceFile {
@@ -30,6 +30,13 @@ impl SourceFile {
             contents: contents.to_string(),
             path: path.into(),
             type_token,
+        }
+    }
+
+    pub fn path(&self) -> &Path {
+        match self {
+            SourceFile::Path(p) => p.as_path(),
+            SourceFile::Contents { path, .. } => path.as_path(),
         }
     }
 }

@@ -25,25 +25,3 @@ pub struct Source {
     /// All the source files that will be printed in the book
     pub source_files: Vec<SourceFile>,
 }
-
-//impl Source {
-//pub fn set_title<S: ToString>(&mut self, title: S) -> &mut Self {
-//self.title = Some(title.to_string());
-//self
-//}
-
-//pub fn add_author<A: Into<Author>>(&mut self, author: A) -> &mut Self {
-//self.authors.push(author.into());
-//self
-//}
-
-//pub fn add_license<S: ToString>(&mut self, license: S) -> &mut Self {
-//self.licenses.push(license.to_string());
-//self
-//}
-
-//pub fn add_source_file<F: Into<SourceFile>>(&mut self, source_file: F) -> &mut Self {
-//self.source_files.push(source_file.into());
-//self
-//}
-//}
