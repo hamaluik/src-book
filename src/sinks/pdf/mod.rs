@@ -1,6 +1,5 @@
-use super::Render;
-use crate::source::{Source, SourceFile};
-use anyhow::{anyhow, Context, Result};
+use crate::source::Source;
+use anyhow::{Context, Result};
 use pdf_gen::layout::Margins;
 use pdf_gen::pdf_writer::types::LineCapStyle;
 use pdf_gen::pdf_writer::Content;
@@ -28,8 +27,8 @@ impl PDF {
     }
 }
 
-impl Render for PDF {
-    fn render(&self, source: &crate::source::Source) -> Result<()> {
+impl PDF {
+    pub fn render(&self, source: &crate::source::Source) -> Result<()> {
         let fira_mono = include_bytes!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/assets/FiraMono-Regular.ttf"
@@ -66,9 +65,8 @@ impl Render for PDF {
         doc.add_page(Page::new(pagesize::HALF_LETTER, None));
 
         for file in source.source_files.iter() {
-            self.render_source_file(&mut doc, file).with_context(|| {
-                format!("Failed to render source file {}!", file.path().display())
-            })?;
+            self.render_source_file(&mut doc, file)
+                .with_context(|| format!("Failed to render source file {}!", file.display()))?;
         }
 
         // add page numbers
@@ -101,9 +99,7 @@ impl Render for PDF {
 
         Ok(())
     }
-}
 
-impl PDF {
     fn render_title_page(&self, doc: &mut Document, source: &Source) -> Result<()> {
         const SIZE_TITLE: Pt = Pt(32.0);
         const SIZE_BY: Pt = Pt(8.0);
@@ -172,28 +168,19 @@ impl PDF {
         Ok(())
     }
 
-    fn render_source_file(&self, doc: &mut Document, file: &SourceFile) -> Result<()> {
+    fn render_source_file(&self, doc: &mut Document, path: &Path) -> Result<()> {
         // read the contents
-        let contents = match file {
-            SourceFile::Path(p) => std::fs::read_to_string(p).with_context(|| {
-                format!("Failed to read contents of {} to string!", p.display())
-            })?,
-            SourceFile::Contents { contents, .. } => contents.to_string(),
-        };
+        let contents = std::fs::read_to_string(path)
+            .with_context(|| format!("Failed to read contents of {} to string!", path.display()))?;
         let contents = contents.replace("    ", "  ");
 
         // figure out the syntax if we can
-        let syntax = match file {
-            SourceFile::Path(path) => self.ss.find_syntax_by_extension(
-                path.extension()
-                    .map(std::ffi::OsStr::to_str)
-                    .unwrap_or_default()
-                    .unwrap_or_default(),
-            ),
-            SourceFile::Contents { .. } => {
-                todo!()
-            }
-        };
+        let syntax = self.ss.find_syntax_by_extension(
+            path.extension()
+                .map(std::ffi::OsStr::to_str)
+                .unwrap_or_default()
+                .unwrap_or_default(),
+        );
 
         // start the set of pages with the path
         let mut text: Vec<(String, Colour, SpanFont)> = Vec::default();
@@ -283,7 +270,7 @@ impl PDF {
 
             // add the current file to the top of each page
             // figure out where the header should go
-            let header = file.path().display().to_string();
+            let header = path.display().to_string();
             let mut header_start = layout::baseline_start(&page, &doc.fonts[0], Pt(12.0));
             let is_even = doc.pages.len() % 2 == 0;
             if is_even {

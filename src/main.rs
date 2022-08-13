@@ -1,5 +1,4 @@
-use crate::sinks::Render;
-use crate::source::{Author, GitRepository, SourceFile};
+use crate::source::{Author, GitRepository};
 use anyhow::{anyhow, Context, Result};
 use cli::Cli;
 use dialoguer::Input;
@@ -28,26 +27,8 @@ struct PDFConfiguration {
 
 #[derive(Deserialize, Serialize)]
 struct Configuration {
-    title: String,
-    files: Vec<PathBuf>,
-    authors: Vec<Author>,
+    source: Source,
     pdf: Option<PDFConfiguration>,
-}
-
-impl From<&Configuration> for Source {
-    fn from(config: &Configuration) -> Self {
-        Source {
-            title: Some(config.title.clone()),
-            authors: config.authors.clone(),
-            licenses: Vec::default(),
-            source_files: config
-                .files
-                .iter()
-                .map(PathBuf::clone)
-                .map(SourceFile::Path)
-                .collect(),
-        }
-    }
 }
 
 fn sort_paths(root: Option<PathBuf>, mut a: Vec<&OsStr>, mut b: Vec<&OsStr>) -> Ordering {
@@ -194,6 +175,41 @@ fn try_main() -> Result<()> {
             }
             authors.sort();
 
+            let mut licenses: Vec<String> = Vec::default();
+            'licenses: loop {
+                if !licenses.is_empty() {
+                    println!("Licenses: [{}]", licenses.join("], ["));
+                }
+                let license: String = Input::with_theme(&theme)
+                    .with_prompt("SPDX license of the repository (leave empty for done)")
+                    .allow_empty(true)
+                    .interact()?;
+                if license.trim().is_empty() {
+                    break 'licenses;
+                }
+
+                licenses.push(license.trim().to_string());
+            }
+
+            let mut source_files: Vec<PathBuf> = repo
+                .source_files
+                .iter()
+                .filter(|&f| f != &PathBuf::from("src-book.toml"))
+                .map(Clone::clone)
+                .collect();
+            source_files.sort_by(|a, b| {
+                let a: Vec<_> = a.iter().collect();
+                let b: Vec<_> = b.iter().collect();
+                sort_paths(None, a, b)
+            });
+
+            let source = Source {
+                title: Some(title),
+                authors,
+                source_files,
+                licenses,
+            };
+
             let mut pdf = None;
             if Confirm::with_theme(&theme)
                 .with_prompt("Do you want to render to PDF?")
@@ -215,24 +231,7 @@ fn try_main() -> Result<()> {
                 pdf = Some(PDFConfiguration { output });
             }
 
-            let mut files: Vec<PathBuf> = repo
-                .source_files
-                .iter()
-                .map(SourceFile::path)
-                .map(Path::to_path_buf)
-                .collect();
-            files.sort_by(|a, b| {
-                let a: Vec<_> = a.iter().collect();
-                let b: Vec<_> = b.iter().collect();
-                sort_paths(None, a, b)
-            });
-
-            let config = Configuration {
-                title,
-                authors,
-                files,
-                pdf,
-            };
+            let config = Configuration { source, pdf };
 
             let config = toml::to_string_pretty(&config)
                 .with_context(|| "Failed to convert configuration to TOML")?;
@@ -257,9 +256,9 @@ fn try_main() -> Result<()> {
                 .with_context(|| "Failed to load src-book.toml contents")?;
             let config = toml::from_str(&contents).with_context(|| "Failed to parse TOML")?;
 
-            let source: Source = Source::from(&config);
+            let Configuration { source, pdf } = config;
 
-            if let Some(pdf) = &config.pdf {
+            if let Some(pdf) = pdf {
                 println!("Rendering PDF to {}...", pdf.output.display());
                 let pdf = sinks::PDF::new(&pdf.output);
                 pdf.render(&source)

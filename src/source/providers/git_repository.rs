@@ -1,17 +1,17 @@
 use super::SourceProvider;
-use crate::source::{Author, AuthorBuilder, Source, SourceFile};
+use crate::source::{Author, AuthorBuilder, Source};
 use anyhow::{anyhow, Context, Result};
-use globset::{GlobMatcher, GlobSet};
+use globset::GlobMatcher;
 use ignore::Walk;
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct GitRepository {
     pub _root: PathBuf,
     pub title: String,
     pub authors: Vec<Author>,
-    pub source_files: Vec<SourceFile>,
+    pub source_files: Vec<PathBuf>,
 }
 
 impl GitRepository {
@@ -135,7 +135,7 @@ impl GitRepository {
                 }
             }
 
-            source_files.into_iter().map(Into::into).collect()
+            source_files
         };
 
         Ok(GitRepository {

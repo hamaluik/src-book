@@ -1,21 +1,17 @@
 mod author;
-pub use author::*;
+use std::path::PathBuf;
 
-mod source_file;
-pub use source_file::*;
+pub use author::*;
 
 mod providers;
 pub use providers::*;
+use serde::{Deserialize, Serialize};
 
 /// Everything we need to know to render the source code of a project as a book
-#[derive(Default, Debug)]
+#[derive(Default, Debug, Serialize, Deserialize)]
 pub struct Source {
     /// The title of the source code / repository / book / etc
     pub title: Option<String>,
-
-    /// All the authors of the repository (which will be sorted by prominence in descending order
-    /// at render time)
-    pub authors: Vec<Author>,
 
     /// The SPDX license ID(s) of the source code. NOTE: NOT validated by default Licenses can be
     /// validated by calling the `validate_licenses()` function, which will query the online SPDX
@@ -23,5 +19,9 @@ pub struct Source {
     pub licenses: Vec<String>,
 
     /// All the source files that will be printed in the book
-    pub source_files: Vec<SourceFile>,
+    pub source_files: Vec<PathBuf>,
+
+    /// All the authors of the repository (which will be sorted by prominence in descending order
+    /// at render time)
+    pub authors: Vec<Author>,
 }
