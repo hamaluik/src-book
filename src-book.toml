@@ -13,6 +13,7 @@ source_files = [
     'src/source/providers/git_repository.rs',
     'src/sinks/pdf/mod.rs',
 ]
+repository = '.'
 
 [[source.authors]]
 user_names = []

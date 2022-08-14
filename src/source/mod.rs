@@ -1,7 +1,9 @@
 mod author;
+mod commit;
 use std::path::PathBuf;
 
 pub use author::*;
+pub use commit::*;
 
 mod providers;
 pub use providers::*;
@@ -24,4 +26,7 @@ pub struct Source {
     /// All the authors of the repository (which will be sorted by prominence in descending order
     /// at render time)
     pub authors: Vec<Author>,
+
+    /// The path to the repository
+    pub repository: PathBuf,
 }

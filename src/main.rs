@@ -97,14 +97,14 @@ fn try_main() -> Result<()> {
                 .interact()
                 .with_context(|| "Failed to obtain title")?;
 
-            let repo = Input::with_theme(&theme)
+            let repo_path = Input::with_theme(&theme)
                 .with_prompt("Repository directory")
                 .default(".".to_string())
                 .interact()
                 .with_context(|| "Failed to obtain repository path")?;
-            let repo = PathBuf::from(repo);
-            if !repo.exists() || !repo.is_dir() {
-                return Err(anyhow!("Path '{}' isn't a directory!", repo.display()));
+            let repo_path = PathBuf::from(repo_path);
+            if !repo_path.exists() || !repo_path.is_dir() {
+                return Err(anyhow!("Path '{}' isn't a directory!", repo_path.display()));
             }
             use globset::{Glob, GlobMatcher};
             let mut block_globs: Vec<GlobMatcher> = Vec::default();
@@ -141,8 +141,9 @@ fn try_main() -> Result<()> {
                 }
             }
 
-            let repo = GitRepository::load(&repo, block_globs)
-                .with_context(|| format!("Failed to load git repository at {}", repo.display()))?;
+            let repo = GitRepository::load(&repo_path, block_globs).with_context(|| {
+                format!("Failed to load git repository at {}", repo_path.display())
+            })?;
 
             let mut authors = repo.authors.clone();
 
@@ -212,6 +213,7 @@ fn try_main() -> Result<()> {
                 authors,
                 source_files,
                 licenses,
+                repository: repo_path,
             };
 
             let mut pdf = None;

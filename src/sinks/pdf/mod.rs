@@ -1,4 +1,4 @@
-use crate::source::Source;
+use crate::source::{Commit, Source};
 use anyhow::{Context, Result};
 use chrono::TimeZone;
 use pdf_gen::layout::Margins;
@@ -99,6 +99,12 @@ impl PDF {
                 }
             }
         }
+
+        let commits = source
+            .commits()
+            .with_context(|| "Failed to get commits for repository")?;
+        self.render_commits(&mut doc, commits)
+            .with_context(|| "Failed to render commit history")?;
 
         let num_toc_pages = self
             .render_toc(&mut doc, page_offset, source_pages)
@@ -409,7 +415,7 @@ impl PDF {
         .with_gutter(In(0.25).into(), doc.pages.len());
         let mut page = Page::new(pagesize::HALF_LETTER, Some(margins));
 
-        self.render_header(doc, &mut page, path)?;
+        self.render_header(doc, &mut page, path.display())?;
 
         let image_size = if aspect_ratio >= 1.0 {
             let width = page.content_box.x2 - page.content_box.x1;
@@ -467,10 +473,10 @@ impl PDF {
         Ok(page_index)
     }
 
-    fn render_header(&self, doc: &Document, page: &mut Page, path: &Path) -> Result<()> {
+    fn render_header<S: ToString>(&self, doc: &Document, page: &mut Page, text: S) -> Result<()> {
         // add the current file to the top of each page
         // figure out where the header should go
-        let header = path.display().to_string();
+        let header = text.to_string();
         let mut header_start = layout::baseline_start(&page, &doc.fonts[0], Pt(12.0));
         let is_even = doc.pages.len() % 2 == 0;
         if is_even {
@@ -633,7 +639,116 @@ impl PDF {
                 break;
             }
 
-            self.render_header(doc, &mut page, path)?;
+            self.render_header(doc, &mut page, path.display())?;
+            layout::layout_text(&doc, &mut page, start, &mut text, wrap_width, bbox);
+            let page_index = doc.add_page(page);
+            if first_page.is_none() {
+                first_page = Some(page_index);
+            }
+        }
+
+        Ok(first_page)
+    }
+
+    fn render_commits(&self, doc: &mut Document, commits: Vec<Commit>) -> Result<Option<usize>> {
+        // convert the commits to a series of text spans
+        let mut text: Vec<(String, Colour, SpanFont)> = Vec::with_capacity(commits.len() * 6);
+
+        const SPAN_FONT_NORMAL: SpanFont = SpanFont {
+            index: 0,
+            size: Pt(8.0),
+        };
+        const SPAN_FONT_BOLD: SpanFont = SpanFont {
+            index: 1,
+            size: Pt(8.0),
+        };
+
+        for commit in commits.into_iter() {
+            let Commit {
+                author,
+                summary,
+                body,
+                date,
+                hash,
+            } = commit;
+
+            text.push((
+                hash.chars().take(8).collect(),
+                Colour::new_rgb_bytes(143, 63, 113),
+                SPAN_FONT_BOLD,
+            ));
+            if let Some(summary) = summary {
+                text.push((
+                    format!(" {}\n", summary),
+                    Colour::new_rgb_bytes(40, 40, 40),
+                    SPAN_FONT_NORMAL,
+                ));
+            }
+            text.push((
+                format!("         {}\n", date.to_rfc2822()),
+                Colour::new_rgb_bytes(121, 116, 14),
+                SPAN_FONT_NORMAL,
+            ));
+            text.push((
+                format!("         {}\n", author),
+                Colour::new_rgb_bytes(7, 102, 120),
+                SPAN_FONT_NORMAL,
+            ));
+            if let Some(body) = body {
+                text.push((
+                    format!("         {}\n", body),
+                    Colour::new_rgb_bytes(60, 56, 54),
+                    SPAN_FONT_NORMAL,
+                ));
+            }
+            text.push(("\n".to_string(), colours::WHITE, SPAN_FONT_NORMAL));
+        }
+
+        // and render it into pages
+        let wrap_width = layout::width_of_text(
+            "         ",
+            &doc.fonts[SPAN_FONT_BOLD.index],
+            SPAN_FONT_BOLD.size,
+        );
+        let mut first_page = None;
+        while !text.is_empty() {
+            let margins = Margins::trbl(
+                In(0.25).into(),
+                In(0.25).into(),
+                In(0.5).into(),
+                In(0.25).into(),
+            )
+            .with_gutter(In(0.25).into(), doc.pages.len());
+            let page_size = pdf_gen::pagesize::HALF_LETTER;
+
+            let mut page = Page::new(page_size, Some(margins));
+            let start = layout::baseline_start(
+                &page,
+                &doc.fonts[SPAN_FONT_BOLD.index],
+                SPAN_FONT_BOLD.size,
+            );
+            let start = (
+                start.0,
+                start.1
+                    - (doc.fonts[SPAN_FONT_BOLD.index].ascent(SPAN_FONT_BOLD.size)
+                        - doc.fonts[0].descent(Pt(12.0)))
+                    - In(0.125).into(),
+            );
+            let bbox = page.content_box.clone();
+
+            // don't start a page with empty lines
+            while let Some(span) = text.first() {
+                if span.0 == "\n" {
+                    text.remove(0);
+                } else {
+                    break;
+                }
+            }
+            if text.is_empty() {
+                break;
+            }
+
+            self.render_header(doc, &mut page, "Commit History")?;
             layout::layout_text(&doc, &mut page, start, &mut text, wrap_width, bbox);
             let page_index = doc.add_page(page);
             if first_page.is_none() {
