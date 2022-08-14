@@ -12,7 +12,10 @@ use std::process::ExitCode;
 
 mod cli;
 mod highlight;
-mod sinks;
+mod sinks {
+    mod pdf;
+    pub use pdf::*;
+}
 mod source;
 
 #[derive(Deserialize, Serialize)]

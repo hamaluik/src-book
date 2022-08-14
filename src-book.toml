@@ -11,7 +11,6 @@ source_files = [
     'src/source/author.rs',
     'src/source/providers/mod.rs',
     'src/source/providers/git_repository.rs',
-    'src/sinks/mod.rs',
     'src/sinks/pdf/mod.rs',
 ]
 

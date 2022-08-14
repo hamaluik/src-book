@@ -67,6 +67,9 @@ impl PDF {
         // add a blank page after the title page so we start on the right
         doc.add_page(Page::new(pagesize::HALF_LETTER, None));
 
+        doc.add_bookmark("Title", 0).bolded();
+        doc.add_bookmark("Table of Contents", 2).italicized();
+
         let mut source_pages: HashMap<PathBuf, usize> = HashMap::new();
         let mut page_offset = doc.pages.len();
         for file in source.source_files.iter() {
@@ -82,17 +85,30 @@ impl PDF {
             {
                 "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
                 | "tiff" => {
-                    self.render_image(&mut doc, file)?;
+                    let page_index = self.render_image(&mut doc, file)?;
+                    doc.add_bookmark(file.display(), page_index);
                 }
-                _ => self
-                    .render_source_file(&mut doc, file)
-                    .with_context(|| format!("Failed to render source file {}!", file.display()))?,
+                _ => {
+                    if let Some(page_index) =
+                        self.render_source_file(&mut doc, file).with_context(|| {
+                            format!("Failed to render source file {}!", file.display())
+                        })?
+                    {
+                        doc.add_bookmark(file.display(), page_index);
+                    }
+                }
             }
         }
 
-        page_offset += self
+        let num_toc_pages = self
             .render_toc(&mut doc, page_offset, source_pages)
             .with_context(|| "Failed to render table of contents")?;
+        page_offset += num_toc_pages;
+
+        // adjust the page numbering of all our source file bookmarks because we inserted a TOC ahead of them
+        for entry in doc.outline.entries.iter_mut().skip(2) {
+            entry.page_index += num_toc_pages;
+        }
 
         // add page numbers
         for (pi, page) in doc.pages.iter_mut().skip(page_offset).enumerate() {
@@ -211,7 +227,26 @@ impl PDF {
             size: ENTRY_SIZE,
         };
 
+        // figure out the underline
+        let (underline_offset, underline_thickness) = doc.fonts[0]
+            .face
+            .underline_metrics()
+            .map(|metrics| {
+                let scaling = Pt(12.0) / doc.fonts[0].face.units_per_em() as f32;
+                (
+                    scaling * metrics.position as f32,
+                    scaling * metrics.thickness as f32,
+                )
+            })
+            .unwrap_or_else(|| (Pt(-2.0), Pt(0.5)));
+
         let mut entries: Vec<(PathBuf, usize)> = source_pages.into_iter().collect();
+        // TODO: deal with when we have more than 1 toc page!
+        // probably have to pre-calculate how many toc pages we're going to generate
+        let mut num_toc_pages = 1;
+        if num_toc_pages % 2 == 1 {
+            num_toc_pages += 1;
+        }
         entries.sort_by_key(|(_, p)| *p);
 
         let mut pages: Vec<Page> = Vec::default();
@@ -243,6 +278,16 @@ impl PDF {
                     break 'page;
                 }
 
+                let mut underline = Content::new();
+                underline
+                    .set_stroke_gray(0.75)
+                    .set_line_cap(LineCapStyle::ButtCap)
+                    .set_line_width(*underline_thickness)
+                    .move_to(*page.content_box.x1, *y + *underline_offset)
+                    .line_to(*page.content_box.x2, *y + *underline_offset)
+                    .stroke();
+                page.add_content(underline);
+
                 let entry = entries.remove(0);
                 page.add_span(SpanLayout {
                     text: entry.0.display().to_string(),
@@ -250,14 +295,26 @@ impl PDF {
                     colour: colours::BLACK,
                     coords: (x, y),
                 });
-                let pagenum = format!("{}", entry.1 + 1);
-                let pagenum_width = layout::width_of_text(&pagenum, &doc.fonts[1], ENTRY_SIZE);
+                let pagenum = format!("{}", entry.1 + 1); // page numbering is 0-indexed, add 1 to make it 1-indexed
+                let pagenum_width =
+                    layout::width_of_text(&pagenum, &doc.fonts[entry_font.index], ENTRY_SIZE);
                 page.add_span(SpanLayout {
                     text: pagenum,
                     font: entry_font,
                     colour: colours::BLACK,
                     coords: (page.content_box.x2 - pagenum_width, y),
                 });
+
+                page.add_intradocument_link(
+                    Rect {
+                        x1: page.content_box.x1,
+                        x2: page.content_box.x2,
+                        y1: y,
+                        y2: y + doc.fonts[entry_font.index].ascent(ENTRY_SIZE),
+                    },
+                    entry.1 + skip_pages + num_toc_pages,
+                );
+
                 y -= height_entry;
             }
 
@@ -338,7 +395,7 @@ impl PDF {
         (file_description, image_description)
     }
 
-    fn render_image(&self, doc: &mut Document, path: &Path) -> Result<()> {
+    fn render_image(&self, doc: &mut Document, path: &Path) -> Result<usize> {
         let image = Image::new_from_disk(path)?;
         let aspect_ratio = image.aspect_ratio();
         let image_index = doc.add_image(image);
@@ -406,8 +463,8 @@ impl PDF {
             coords: (x, y),
         });
 
-        doc.add_page(page);
-        Ok(())
+        let page_index = doc.add_page(page);
+        Ok(page_index)
     }
 
     fn render_header(&self, doc: &Document, page: &mut Page, path: &Path) -> Result<()> {
@@ -459,7 +516,7 @@ impl PDF {
         Ok(())
     }
 
-    fn render_source_file(&self, doc: &mut Document, path: &Path) -> Result<()> {
+    fn render_source_file(&self, doc: &mut Document, path: &Path) -> Result<Option<usize>> {
         // read the contents
         let contents = std::fs::read_to_string(path)
             .with_context(|| format!("Failed to read contents of {} to string!", path.display()))?;
@@ -543,6 +600,7 @@ impl PDF {
         } else {
             Pt(0.0)
         };
+        let mut first_page = None;
         while !text.is_empty() {
             let margins = Margins::trbl(
                 In(0.25).into(),
@@ -577,9 +635,12 @@ impl PDF {
 
             self.render_header(doc, &mut page, path)?;
             layout::layout_text(&doc, &mut page, start, &mut text, wrap_width, bbox);
-            doc.add_page(page);
+            let page_index = doc.add_page(page);
+            if first_page.is_none() {
+                first_page = Some(page_index);
+            }
         }
 
-        Ok(())
+        Ok(first_page)
     }
 }
