@@ -24,3 +24,6 @@ globset = "0.4"
 pdf-gen = { path = "../pdf-gen" }
 toml = "0.5"
 serde = { version = "1", features = ["derive"] }
+byte-unit = "4"
+chrono = "0.4"
+bincode = "1"

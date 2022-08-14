@@ -1,8 +1,9 @@
 use crate::source::Source;
 use anyhow::{Context, Result};
+use chrono::TimeZone;
 use pdf_gen::layout::Margins;
-use pdf_gen::pdf_writer::types::LineCapStyle;
-use pdf_gen::pdf_writer::Content;
+use pdf_gen::pdf_writer_crate::types::LineCapStyle;
+use pdf_gen::pdf_writer_crate::Content;
 use pdf_gen::*;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -21,7 +22,8 @@ pub struct PDF {
 impl PDF {
     pub fn new<P: AsRef<Path>>(outfile: P) -> PDF {
         let outfile = outfile.as_ref().to_path_buf();
-        let ss = SyntaxSet::load_defaults_newlines();
+        let ss = bincode::deserialize(crate::highlight::SERIALIZED_SYNTAX)
+            .expect("can deserialize syntaxes");
         let ts = ThemeSet::load_defaults();
 
         PDF { outfile, ss, ts }
@@ -69,8 +71,23 @@ impl PDF {
         let mut page_offset = doc.pages.len();
         for file in source.source_files.iter() {
             source_pages.insert(file.clone(), doc.pages.len() - page_offset);
-            self.render_source_file(&mut doc, file)
-                .with_context(|| format!("Failed to render source file {}!", file.display()))?;
+
+            // render an image or source file depending on its extension
+            match file
+                .extension()
+                .unwrap_or_default()
+                .to_ascii_lowercase()
+                .to_str()
+                .unwrap_or_default()
+            {
+                "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
+                | "tiff" => {
+                    self.render_image(&mut doc, file)?;
+                }
+                _ => self
+                    .render_source_file(&mut doc, file)
+                    .with_context(|| format!("Failed to render source file {}!", file.display()))?,
+            }
         }
 
         page_offset += self
@@ -183,7 +200,7 @@ impl PDF {
         source_pages: HashMap<PathBuf, usize>,
     ) -> Result<usize> {
         const CONTENTS_SIZE: Pt = Pt(24.0);
-        const ENTRY_SIZE: Pt = Pt(12.0);
+        const ENTRY_SIZE: Pt = Pt(10.0);
 
         let height_contents = doc.fonts[1].line_height(CONTENTS_SIZE);
         let height_entry = doc.fonts[0].line_height(ENTRY_SIZE);
@@ -256,6 +273,190 @@ impl PDF {
         doc.pages.splice(skip_pages..skip_pages, pages);
 
         Ok(added_page_count)
+    }
+
+    fn describe_image(image: &Image, path: &Path) -> (String, String) {
+        let mut file_description: String = path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
+
+        if let Ok(metadata) = std::fs::metadata(path) {
+            let file_size = metadata.len();
+            let file_size = byte_unit::Byte::from_bytes(file_size as u128);
+            let file_size = file_size.get_appropriate_unit(false).format(2);
+            file_description.push_str(", ");
+            file_description.push_str(&file_size);
+
+            if let Ok(created) = metadata.created() {
+                let unix_time = created
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default();
+
+                let created = chrono::Utc.timestamp(unix_time.as_secs() as i64, 0);
+                file_description.push_str(&format!(" Created {}", created.to_rfc2822()));
+            }
+        }
+
+        let mut image_description = String::new();
+        match &image.image {
+            ImageType::Raster(RasterImageType::DirectlyEmbeddableJpeg(_)) => {
+                let w = image.width as usize;
+                let h = image.height as usize;
+                let format = "rgb8";
+                image_description.push_str(&format!("{w}px by {h}px [{format}]"));
+            }
+            ImageType::Raster(RasterImageType::Image(im)) => {
+                let w = image.width as usize;
+                let h = image.height as usize;
+                let format = match im.color() {
+                    pdf_gen::image_crate::ColorType::L8 => "l8",
+                    pdf_gen::image_crate::ColorType::La8 => "la8",
+                    pdf_gen::image_crate::ColorType::Rgb8 => "rgb8",
+                    pdf_gen::image_crate::ColorType::Rgba8 => "rgba8",
+                    pdf_gen::image_crate::ColorType::L16 => "l16",
+                    pdf_gen::image_crate::ColorType::La16 => "la16",
+                    pdf_gen::image_crate::ColorType::Rgb16 => "rgb16",
+                    pdf_gen::image_crate::ColorType::Rgba16 => "rgba16",
+                    pdf_gen::image_crate::ColorType::Rgb32F => "rgb32f",
+                    pdf_gen::image_crate::ColorType::Rgba32F => "rgba32f",
+                    _ => "unknown format",
+                };
+                image_description.push_str(&format!("{w}px by {h}px [{format}]"));
+            }
+            ImageType::SVG(tree) => {
+                let viewbox = tree.svg_node().view_box.rect;
+                let x = viewbox.x();
+                let y = viewbox.y();
+                let w = viewbox.width();
+                let h = viewbox.height();
+                image_description.push_str(&format!("SVG viewbox: [{x} {y} {w} {h}]"));
+            }
+        }
+
+        (file_description, image_description)
+    }
+
+    fn render_image(&self, doc: &mut Document, path: &Path) -> Result<()> {
+        let image = Image::new_from_disk(path)?;
+        let aspect_ratio = image.aspect_ratio();
+        let image_index = doc.add_image(image);
+
+        let margins = Margins::trbl(
+            In(0.25).into(),
+            In(0.25).into(),
+            In(0.5).into(),
+            In(0.25).into(),
+        )
+        .with_gutter(In(0.25).into(), doc.pages.len());
+        let mut page = Page::new(pagesize::HALF_LETTER, Some(margins));
+
+        self.render_header(doc, &mut page, path)?;
+
+        let image_size = if aspect_ratio >= 1.0 {
+            let width = page.content_box.x2 - page.content_box.x1;
+            let height = width / aspect_ratio;
+            (width, height)
+        } else {
+            let height = page.content_box.y2
+                - page.content_box.y1
+                - doc.fonts[0].line_height(Pt(12.0))
+                - In(0.25).into()
+                - (doc.fonts[0].line_height(Pt(8.0)) * 2.0);
+            let width = height * aspect_ratio;
+            (width, height)
+        };
+
+        let x =
+            (page.content_box.x2 - page.content_box.x1 - image_size.0) / 2.0 + page.content_box.x1;
+        let y = (page.content_box.y2 - page.content_box.y1 - image_size.1) / 2.0
+            + page.content_box.y1
+            + doc.fonts[0].line_height(Pt(8.0));
+
+        page.add_image(ImageLayout {
+            image_index,
+            position: Rect {
+                x1: x,
+                y1: y,
+                x2: x + image_size.0,
+                y2: y + image_size.1,
+            },
+        });
+        let y = y - doc.fonts[0].ascent(Pt(8.0));
+        let (file_description, image_description) =
+            Self::describe_image(&doc.images[image_index], path);
+        page.add_span(SpanLayout {
+            text: file_description,
+            font: SpanFont {
+                index: 0,
+                size: Pt(8.0),
+            },
+            colour: Colour::new_grey(0.75),
+            coords: (x, y),
+        });
+        let y = y - doc.fonts[0].line_height(Pt(8.0));
+        page.add_span(SpanLayout {
+            text: image_description,
+            font: SpanFont {
+                index: 0,
+                size: Pt(8.0),
+            },
+            colour: Colour::new_grey(0.75),
+            coords: (x, y),
+        });
+
+        doc.add_page(page);
+        Ok(())
+    }
+
+    fn render_header(&self, doc: &Document, page: &mut Page, path: &Path) -> Result<()> {
+        // add the current file to the top of each page
+        // figure out where the header should go
+        let header = path.display().to_string();
+        let mut header_start = layout::baseline_start(&page, &doc.fonts[0], Pt(12.0));
+        let is_even = doc.pages.len() % 2 == 0;
+        if is_even {
+            header_start.0 =
+                page.content_box.x2 - layout::width_of_text(&header, &doc.fonts[0], Pt(12.0));
+        }
+
+        // figure out the underline
+        let (line_offset, line_thickness) = doc.fonts[0]
+            .face
+            .underline_metrics()
+            .map(|metrics| {
+                let scaling = Pt(12.0) / doc.fonts[0].face.units_per_em() as f32;
+                (
+                    scaling * metrics.position as f32,
+                    scaling * metrics.thickness as f32,
+                )
+            })
+            .unwrap_or_else(|| (Pt(-2.0), Pt(0.5)));
+
+        // add a line below the header
+        let mut content = Content::new();
+        content
+            .set_stroke_gray(0.75)
+            .set_line_cap(LineCapStyle::ButtCap)
+            .set_line_width(*line_thickness)
+            .move_to(*page.content_box.x1, *header_start.1 + *line_offset)
+            .line_to(*page.content_box.x2, *header_start.1 + *line_offset)
+            .stroke();
+        page.add_content(content);
+
+        // write the header
+        page.add_span(SpanLayout {
+            text: header,
+            font: SpanFont {
+                index: 0,
+                size: Pt(12.0),
+            },
+            colour: Colour::new_grey(0.25),
+            coords: header_start,
+        });
+
+        Ok(())
     }
 
     fn render_source_file(&self, doc: &mut Document, path: &Path) -> Result<()> {
@@ -356,42 +557,25 @@ impl PDF {
             let start = layout::baseline_start(&page, &doc.fonts[0], text_size);
             let start = (
                 start.0,
-                start.1 - (doc.fonts[0].line_height(Pt(12.0)) * 2.0),
+                start.1
+                    - (doc.fonts[0].ascent(Pt(10.0)) - doc.fonts[0].descent(Pt(12.0)))
+                    - In(0.125).into(),
             );
             let bbox = page.content_box.clone();
 
-            // add the current file to the top of each page
-            // figure out where the header should go
-            let header = path.display().to_string();
-            let mut header_start = layout::baseline_start(&page, &doc.fonts[0], Pt(12.0));
-            let is_even = doc.pages.len() % 2 == 0;
-            if is_even {
-                header_start.0 =
-                    page.content_box.x2 - layout::width_of_text(&header, &doc.fonts[0], Pt(12.0));
+            // don't start a page with empty lines
+            while let Some(span) = text.first() {
+                if span.0 == "\n" {
+                    text.remove(0);
+                } else {
+                    break;
+                }
+            }
+            if text.is_empty() {
+                break;
             }
 
-            // add a line below the header
-            let mut content = Content::new();
-            content
-                .set_stroke_gray(0.75)
-                .set_line_cap(LineCapStyle::ButtCap)
-                .set_line_width(0.25)
-                .move_to(*page.content_box.x1, *header_start.1 - 2.0)
-                .line_to(*page.content_box.x2, *header_start.1 - 2.0)
-                .stroke();
-            page.add_content(content);
-
-            // write the header
-            page.add_span(SpanLayout {
-                text: header,
-                font: SpanFont {
-                    index: 0,
-                    size: Pt(12.0),
-                },
-                colour: Colour::new_grey(0.25),
-                coords: header_start,
-            });
-
+            self.render_header(doc, &mut page, path)?;
             layout::layout_text(&doc, &mut page, start, &mut text, wrap_width, bbox);
             doc.add_page(page);
         }
