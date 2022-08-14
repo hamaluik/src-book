@@ -67,11 +67,19 @@ impl PDF {
         // add a blank page after the title page so we start on the right
         doc.add_page(Page::new(pagesize::HALF_LETTER, None));
 
-        doc.add_bookmark("Title", 0).bolded();
-        doc.add_bookmark("Table of Contents", 2).italicized();
+        doc.add_bookmark(None, "Title", 0).borrow_mut().bolded();
+        doc.add_bookmark(None, "Table of Contents", 2)
+            .borrow_mut()
+            .italicized();
 
         let mut source_pages: HashMap<PathBuf, usize> = HashMap::new();
         let mut page_offset = doc.pages.len();
+
+        let source_code_bookmark = doc.add_bookmark(None, "Source Files", doc.pages.len());
+        {
+            source_code_bookmark.borrow_mut().bolded();
+        }
+
         for file in source.source_files.iter() {
             source_pages.insert(file.clone(), doc.pages.len() - page_offset);
 
@@ -86,7 +94,11 @@ impl PDF {
                 "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
                 | "tiff" => {
                     let page_index = self.render_image(&mut doc, file)?;
-                    doc.add_bookmark(file.display(), page_index);
+                    doc.add_bookmark(
+                        Some(source_code_bookmark.clone()),
+                        file.display(),
+                        page_index,
+                    );
                 }
                 _ => {
                     if let Some(page_index) =
@@ -94,7 +106,11 @@ impl PDF {
                             format!("Failed to render source file {}!", file.display())
                         })?
                     {
-                        doc.add_bookmark(file.display(), page_index);
+                        doc.add_bookmark(
+                            Some(source_code_bookmark.clone()),
+                            file.display(),
+                            page_index,
+                        );
                     }
                 }
             }
@@ -103,8 +119,12 @@ impl PDF {
         let commits = source
             .commits()
             .with_context(|| "Failed to get commits for repository")?;
-        self.render_commits(&mut doc, commits)
-            .with_context(|| "Failed to render commit history")?;
+        if let Some(commit_page) = self
+            .render_commits(&mut doc, commits)
+            .with_context(|| "Failed to render commit history")?
+        {
+            doc.add_bookmark(None, "Commit History", commit_page);
+        }
 
         let num_toc_pages = self
             .render_toc(&mut doc, page_offset, source_pages)
@@ -112,8 +132,23 @@ impl PDF {
         page_offset += num_toc_pages;
 
         // adjust the page numbering of all our source file bookmarks because we inserted a TOC ahead of them
+        fn offset_bookmark_page_indices(
+            items: &mut [std::rc::Rc<std::cell::RefCell<pdf_gen::OutlineEntry>>],
+            offset_amount: usize,
+        ) {
+            for item in items {
+                let has_children = !item.borrow().children.is_empty();
+                if has_children {
+                    offset_bookmark_page_indices(&mut item.borrow_mut().children, offset_amount)
+                }
+                item.borrow_mut().page_index += offset_amount;
+            }
+        }
         for entry in doc.outline.entries.iter_mut().skip(2) {
-            entry.page_index += num_toc_pages;
+            entry.borrow_mut().page_index += num_toc_pages;
+            if !entry.borrow().children.is_empty() {
+                offset_bookmark_page_indices(&mut entry.borrow_mut().children, num_toc_pages);
+            }
         }
 
         // add page numbers
@@ -720,6 +755,11 @@ impl PDF {
             )
             .with_gutter(In(0.25).into(), doc.pages.len());
             let page_size = pdf_gen::pagesize::HALF_LETTER;
+
+            // insert a blank page so we open to the correct side
+            if first_page.is_none() && doc.pages.len() % 2 == 1 {
+                doc.add_page(Page::new(page_size, Some(margins.clone())));
+            }
 
             let mut page = Page::new(page_size, Some(margins));
             let start = layout::baseline_start(
