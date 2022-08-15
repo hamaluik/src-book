@@ -119,15 +119,15 @@ impl PDF {
         let commits = source
             .commits()
             .with_context(|| "Failed to get commits for repository")?;
-        if let Some(commit_page) = self
+        let commit_page_index = self
             .render_commits(&mut doc, commits)
-            .with_context(|| "Failed to render commit history")?
-        {
+            .with_context(|| "Failed to render commit history")?;
+        if let Some(commit_page) = commit_page_index {
             doc.add_bookmark(None, "Commit History", commit_page);
         }
 
         let num_toc_pages = self
-            .render_toc(&mut doc, page_offset, source_pages)
+            .render_toc(&mut doc, page_offset, source_pages, commit_page_index)
             .with_context(|| "Failed to render table of contents")?;
         page_offset += num_toc_pages;
 
@@ -255,18 +255,32 @@ impl PDF {
         doc: &mut Document,
         skip_pages: usize,
         source_pages: HashMap<PathBuf, usize>,
+        git_history_page: Option<usize>,
     ) -> Result<usize> {
         const CONTENTS_SIZE: Pt = Pt(24.0);
+        //const SECTION_SIZE: Pt = Pt(12.0);
         const ENTRY_SIZE: Pt = Pt(10.0);
 
         let height_contents = doc.fonts[1].line_height(CONTENTS_SIZE);
         let height_entry = doc.fonts[0].line_height(ENTRY_SIZE);
         let descent_entry = doc.fonts[0].descent(ENTRY_SIZE);
 
-        let entry_font = SpanFont {
+        /*const SECTION_FONT: SpanFont = SpanFont {
+            index: 1,
+            size: SECTION_SIZE,
+        };*/
+
+        const ENTRY_FONT: SpanFont = SpanFont {
             index: 0,
             size: ENTRY_SIZE,
         };
+
+        // TODO: deal with when we have more than 1 toc page!
+        // probably have to pre-calculate how many toc pages we're going to generate
+        let mut num_toc_pages = 1;
+        if num_toc_pages % 2 == 1 {
+            num_toc_pages += 1;
+        }
 
         // figure out the underline
         let (underline_offset, underline_thickness) = doc.fonts[0]
@@ -281,12 +295,12 @@ impl PDF {
             })
             .unwrap_or_else(|| (Pt(-2.0), Pt(0.5)));
 
-        let mut entries: Vec<(PathBuf, usize)> = source_pages.into_iter().collect();
-        // TODO: deal with when we have more than 1 toc page!
-        // probably have to pre-calculate how many toc pages we're going to generate
-        let mut num_toc_pages = 1;
-        if num_toc_pages % 2 == 1 {
-            num_toc_pages += 1;
+        let mut entries: Vec<(String, usize)> = source_pages
+            .into_iter()
+            .map(|(path, pi)| (path.display().to_string(), pi))
+            .collect();
+        if let Some(git_history_page) = git_history_page {
+            entries.push(("Commit History".to_string(), git_history_page - skip_pages));
         }
         entries.sort_by_key(|(_, p)| *p);
 
@@ -319,29 +333,43 @@ impl PDF {
                     break 'page;
                 }
 
+                let entry = entries.remove(0);
+                let entry_width = layout::width_of_text(
+                    &format!("{} ", entry.0),
+                    &doc.fonts[ENTRY_FONT.index],
+                    ENTRY_SIZE,
+                );
+                let pagenum = format!("{}", entry.1 + 1); // page numbering is 0-indexed, add 1 to make it 1-indexed
+                let pagenum_width =
+                    layout::width_of_text(&pagenum, &doc.fonts[ENTRY_FONT.index], ENTRY_SIZE);
+
                 let mut underline = Content::new();
                 underline
                     .set_stroke_gray(0.75)
                     .set_line_cap(LineCapStyle::ButtCap)
                     .set_line_width(*underline_thickness)
-                    .move_to(*page.content_box.x1, *y + *underline_offset)
-                    .line_to(*page.content_box.x2, *y + *underline_offset)
+                    .move_to(*page.content_box.x1 + *entry_width, *y + *underline_offset)
+                    .line_to(
+                        *page.content_box.x2
+                            - *layout::width_of_text(
+                                &format!(" {}", pagenum),
+                                &doc.fonts[ENTRY_FONT.index],
+                                ENTRY_SIZE,
+                            ),
+                        *y + *underline_offset,
+                    )
                     .stroke();
                 page.add_content(underline);
 
-                let entry = entries.remove(0);
                 page.add_span(SpanLayout {
-                    text: entry.0.display().to_string(),
-                    font: entry_font,
+                    text: entry.0,
+                    font: ENTRY_FONT,
                     colour: colours::BLACK,
                     coords: (x, y),
                 });
-                let pagenum = format!("{}", entry.1 + 1); // page numbering is 0-indexed, add 1 to make it 1-indexed
-                let pagenum_width =
-                    layout::width_of_text(&pagenum, &doc.fonts[entry_font.index], ENTRY_SIZE);
                 page.add_span(SpanLayout {
                     text: pagenum,
-                    font: entry_font,
+                    font: ENTRY_FONT,
                     colour: colours::BLACK,
                     coords: (page.content_box.x2 - pagenum_width, y),
                 });
@@ -351,7 +379,7 @@ impl PDF {
                         x1: page.content_box.x1,
                         x2: page.content_box.x2,
                         y1: y,
-                        y2: y + doc.fonts[entry_font.index].ascent(ENTRY_SIZE),
+                        y2: y + doc.fonts[ENTRY_FONT.index].ascent(ENTRY_SIZE),
                     },
                     entry.1 + skip_pages + num_toc_pages,
                 );
