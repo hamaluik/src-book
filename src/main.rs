@@ -1,9 +1,11 @@
+use crate::sinks::{FontFamily, SyntaxTheme};
 use crate::source::GitRepository;
 use anyhow::{anyhow, Context, Result};
 use cli::Cli;
 use dialoguer::Input;
-use dialoguer::{theme::ColorfulTheme, Confirm};
+use dialoguer::{theme::ColorfulTheme, Confirm, FuzzySelect};
 use serde::{Deserialize, Serialize};
+use sinks::PDF;
 use source::{AuthorBuilder, Source};
 use std::cmp::Ordering;
 use std::ffi::OsStr;
@@ -19,20 +21,9 @@ mod sinks {
 mod source;
 
 #[derive(Deserialize, Serialize)]
-struct PDFConfiguration {
-    output: PathBuf,
-    /*tab_size: usize,
-    reduce_spaces: bool,
-    native_tab_size: usize,
-    page_width_in: f32,
-    page_height_in: f32,
-    margin_top_in: f32,*/
-}
-
-#[derive(Deserialize, Serialize)]
 struct Configuration {
     source: Source,
-    pdf: Option<PDFConfiguration>,
+    pdf: Option<PDF>,
 }
 
 fn sort_paths(root: Option<PathBuf>, mut a: Vec<&OsStr>, mut b: Vec<&OsStr>) -> Ordering {
@@ -221,20 +212,38 @@ fn try_main() -> Result<()> {
                 .with_prompt("Do you want to render to PDF?")
                 .interact()?
             {
-                let output: String = Input::with_theme(&theme)
+                let outfile: String = Input::with_theme(&theme)
                     .with_prompt("Output pdf file")
                     .allow_empty(false)
                     .interact()?;
-                let mut output = PathBuf::from(output);
-                let ext = output
+                let mut outfile = PathBuf::from(outfile);
+                let ext = outfile
                     .extension()
                     .map(std::ffi::OsStr::to_ascii_lowercase)
                     .unwrap_or_default();
                 if ext != *"pdf" {
-                    output.set_extension("pdf");
+                    outfile.set_extension("pdf");
                 }
 
-                pdf = Some(PDFConfiguration { output });
+                let syntax_theme = FuzzySelect::with_theme(&theme)
+                    .with_prompt("Syntax highlighting theme")
+                    .items(SyntaxTheme::all())
+                    .default(0)
+                    .interact()?;
+                let syntax_theme = SyntaxTheme::all()[syntax_theme];
+
+                let font = FuzzySelect::with_theme(&theme)
+                    .with_prompt("Font family")
+                    .items(FontFamily::all())
+                    .default(0)
+                    .interact()?;
+                let font = FontFamily::all()[font];
+
+                pdf = Some(PDF {
+                    outfile,
+                    theme: syntax_theme,
+                    font,
+                });
             }
 
             let config = Configuration { source, pdf };
@@ -265,8 +274,7 @@ fn try_main() -> Result<()> {
             let Configuration { source, pdf } = config;
 
             if let Some(pdf) = pdf {
-                println!("Rendering PDF to {}...", pdf.output.display());
-                let pdf = sinks::PDF::new(&pdf.output);
+                println!("Rendering PDF to {}...", pdf.outfile.display());
                 pdf.render(&source)
                     .with_context(|| "Failed to render PDF")?;
             }

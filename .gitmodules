@@ -1,0 +1,12 @@
+[submodule "assets/themes/Solarized"]
+	path = assets/themes/Solarized
+	url = git@github.com:braver/Solarized.git
+[submodule "assets/themes/onehalf"]
+	path = assets/themes/onehalf
+	url = git@github.com:sonph/onehalf.git
+[submodule "assets/themes/gruvbox-tmTheme"]
+	path = assets/themes/gruvbox-tmTheme
+	url = git@github.com:subnut/gruvbox-tmTheme.git
+[submodule "assets/themes/github-sublime-theme"]
+	path = assets/themes/github-sublime-theme
+	url = git@github.com:AlexanderEkdahl/github-sublime-theme.git

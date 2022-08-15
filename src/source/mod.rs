@@ -15,6 +15,9 @@ pub struct Source {
     /// The title of the source code / repository / book / etc
     pub title: Option<String>,
 
+    /// The path to the repository
+    pub repository: PathBuf,
+
     /// The SPDX license ID(s) of the source code. NOTE: NOT validated by default Licenses can be
     /// validated by calling the `validate_licenses()` function, which will query the online SPDX
     /// API to check if the license is valid or not
@@ -26,7 +29,4 @@ pub struct Source {
     /// All the authors of the repository (which will be sorted by prominence in descending order
     /// at render time)
     pub authors: Vec<Author>,
-
-    /// The path to the repository
-    pub repository: PathBuf,
 }

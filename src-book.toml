@@ -1,25 +1,30 @@
 [source]
 title = 'src-book'
+repository = '.'
 licenses = ['Apache-2.0']
 source_files = [
     'README.md',
     'LICENSE',
     'Cargo.toml',
+    'build.rs',
     'src/main.rs',
     'src/cli.rs',
+    'src/highlight.rs',
     'src/source/mod.rs',
     'src/source/author.rs',
+    'src/source/commit.rs',
     'src/source/providers/mod.rs',
     'src/source/providers/git_repository.rs',
     'src/sinks/pdf/mod.rs',
 ]
-repository = '.'
 
 [[source.authors]]
 user_names = []
 name = 'Kenton Hamaluik'
 email = 'kenton@hamaluik.ca'
-prominence = 4
+prominence = 11
 
 [pdf]
-output = 'src-book.pdf'
+font = 'Fira Mono'
+theme = 'OneHalfLight'
+outfile = 'src-book.pdf'
