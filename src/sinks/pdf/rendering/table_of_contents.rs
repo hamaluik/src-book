@@ -1,7 +1,10 @@
 //! Table of contents with clickable links.
 //!
-//! Generates a TOC listing all source files and commit history with page numbers.
-//! Each entry links to its corresponding page within the document.
+//! Generates a TOC listing frontmatter files, source files, and commit history
+//! with page numbers. Each entry links to its corresponding page within the document.
+//!
+//! Frontmatter appears as a flat list under its own heading before the hierarchical
+//! source code tree structure.
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
@@ -152,6 +155,7 @@ pub fn render(
     doc: &mut Document,
     font_ids: &FontIds,
     skip_pages: usize,
+    frontmatter_pages: HashMap<PathBuf, usize>,
     source_pages: HashMap<PathBuf, usize>,
     git_history_page: Option<usize>,
 ) -> Result<usize> {
@@ -190,14 +194,37 @@ pub fn render(
         })
         .unwrap_or_else(|| (Pt(-2.0), Pt(0.5)));
 
-    // build tree structure and flatten for rendering
+    // build entries list
+    let mut entries: Vec<(String, usize)> = Vec::new();
+
+    // add frontmatter section if there are frontmatter files
+    if !frontmatter_pages.is_empty() {
+        // sort by page number for consistent ordering
+        let mut frontmatter_entries: Vec<_> = frontmatter_pages.into_iter().collect();
+        frontmatter_entries.sort_by_key(|(_, page)| *page);
+
+        if let Some((_, first_page)) = frontmatter_entries.first() {
+            entries.push(("Frontmatter".to_string(), *first_page));
+        }
+
+        for (path, page) in frontmatter_entries {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| path.display().to_string());
+            entries.push((format!("  └── {}", name), page));
+        }
+    }
+
+    // build tree structure for source files and flatten for rendering
     let tree = build_tree(source_pages);
     let flat_entries = flatten_tree(&tree);
 
-    let mut entries: Vec<(String, usize)> = flat_entries
-        .into_iter()
-        .map(|e| (format!("{}{}", e.prefix, e.name), e.page))
-        .collect();
+    entries.extend(
+        flat_entries
+            .into_iter()
+            .map(|e| (format!("{}{}", e.prefix, e.name), e.page)),
+    );
 
     if let Some(git_history_page) = git_history_page {
         entries.push(("Commit History".to_string(), git_history_page - skip_pages));

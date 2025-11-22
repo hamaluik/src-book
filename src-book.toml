@@ -4,6 +4,11 @@ repository = '.'
 entrypoint = 'src/main.rs'
 commit_order = 'OldestFirst'
 licenses = ['Apache-2.0']
+frontmatter_files = [
+    'README.md',
+    'Cargo.toml',
+    'LICENSE',
+]
 source_files = [
     'src/main.rs',
     'src/cli.rs',
@@ -28,9 +33,6 @@ source_files = [
     'src/sinks/pdf/rendering/source_file.rs',
     'src/sinks/pdf/rendering/table_of_contents.rs',
     'src/sinks/pdf/rendering/title_page.rs',
-    'Cargo.toml',
-    'LICENSE',
-    'README.md',
     'build.rs',
     'assets/syntaxes.bin',
     'assets/themes.bin',
@@ -46,7 +48,7 @@ source_files = [
 user_names = []
 name = 'Kenton Hamaluik'
 email = 'kenton@hamaluik.ca'
-prominence = 25
+prominence = 26
 
 [pdf]
 font = 'SourceCodePro'

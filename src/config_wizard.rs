@@ -1,16 +1,19 @@
 //! Interactive configuration wizard for creating `src-book.toml`.
 //!
-//! The wizard collects book metadata, repository settings, and PDF output options
-//! through a series of prompts. It extracts authors from git commit history and
-//! allows manual additions with prominence ranking.
+//! The wizard collects book metadata, repository settings, frontmatter file selection,
+//! and PDF output options through a series of prompts. It extracts authors from git
+//! commit history and allows manual additions with prominence ranking.
+//!
+//! Frontmatter files (README, LICENSE, etc.) are auto-detected and presented for
+//! selection. Selected files are rendered in their own section before source code.
 
-use crate::detection::{detect_defaults, DetectedDefaults};
+use crate::detection::{detect_defaults, detect_frontmatter, DetectedDefaults};
 use crate::file_ordering::{sort_paths, sort_with_entrypoint};
 use crate::sinks::{SyntaxTheme, PDF};
 use crate::source::{AuthorBuilder, CommitOrder, GitRepository, Source};
 use anyhow::{anyhow, Context, Result};
 use dialoguer::theme::ColorfulTheme;
-use dialoguer::{Confirm, FuzzySelect, Input};
+use dialoguer::{Confirm, FuzzySelect, Input, MultiSelect};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -87,12 +90,8 @@ pub fn run() -> Result<()> {
         }
     }
 
-    let repo = GitRepository::load(&repo_path, block_globs).with_context(|| {
-        format!(
-            "Failed to load git repository at {}",
-            repo_path.display()
-        )
-    })?;
+    let repo = GitRepository::load(&repo_path, block_globs)
+        .with_context(|| format!("Failed to load git repository at {}", repo_path.display()))?;
 
     let mut authors = repo.authors.clone();
 
@@ -153,6 +152,40 @@ pub fn run() -> Result<()> {
         .map(Clone::clone)
         .collect();
 
+    // detect and select frontmatter files
+    let detected_frontmatter = detect_frontmatter(&source_files);
+    let frontmatter_files = if !detected_frontmatter.is_empty() {
+        let frontmatter_strings: Vec<String> = detected_frontmatter
+            .iter()
+            .map(|p| p.display().to_string())
+            .collect();
+
+        println!(
+            "Detected {} potential frontmatter file(s): {}",
+            detected_frontmatter.len(),
+            frontmatter_strings.join(", ")
+        );
+
+        let defaults: Vec<bool> = detected_frontmatter.iter().map(|_| true).collect();
+        let selections = MultiSelect::with_theme(&theme)
+            .with_prompt("Select files for the frontmatter section (before source code)")
+            .items(&frontmatter_strings)
+            .defaults(&defaults)
+            .interact()?;
+
+        let selected: Vec<PathBuf> = selections
+            .into_iter()
+            .map(|i| detected_frontmatter[i].clone())
+            .collect();
+
+        // remove selected frontmatter from source files
+        source_files.retain(|f| !selected.contains(f));
+
+        selected
+    } else {
+        Vec::new()
+    };
+
     // ask for entrypoint file to control ordering
     // default to yes if we detected an entrypoint
     let entrypoint = if Confirm::with_theme(&theme)
@@ -195,10 +228,8 @@ pub fn run() -> Result<()> {
     sort_with_entrypoint(&mut source_files, entrypoint.as_ref());
 
     // ask about commit history ordering
-    let commit_order_options: Vec<String> = CommitOrder::all()
-        .iter()
-        .map(|o| o.to_string())
-        .collect();
+    let commit_order_options: Vec<String> =
+        CommitOrder::all().iter().map(|o| o.to_string()).collect();
     let commit_order_idx = FuzzySelect::with_theme(&theme)
         .with_prompt("Commit history order")
         .items(&commit_order_options)
@@ -209,6 +240,7 @@ pub fn run() -> Result<()> {
     let source = Source {
         title: Some(title),
         authors,
+        frontmatter_files,
         source_files,
         licenses,
         repository: repo_path,
@@ -243,7 +275,7 @@ pub fn run() -> Result<()> {
 
         let base_font_size: f32 = Input::with_theme(&theme)
             .with_prompt("Base font size in points")
-            .default(10.0)
+            .default(8.0)
             .interact()?;
 
         // calculate derived font sizes from base, rounded to integers
@@ -261,9 +293,7 @@ pub fn run() -> Result<()> {
         {
             let booklet_path: String = Input::with_theme(&theme)
                 .with_prompt("Booklet output file")
-                .default(
-                    outfile.with_extension("").to_string_lossy().to_string() + "-booklet.pdf",
-                )
+                .default(outfile.with_extension("").to_string_lossy().to_string() + "-booklet.pdf")
                 .interact()?;
             Some(PathBuf::from(booklet_path))
         } else {
@@ -321,8 +351,8 @@ pub fn run() -> Result<()> {
 
     let config = Configuration { source, pdf };
 
-    let config =
-        toml::to_string_pretty(&config).with_context(|| "Failed to convert configuration to TOML")?;
+    let config = toml::to_string_pretty(&config)
+        .with_context(|| "Failed to convert configuration to TOML")?;
 
     let config_path = PathBuf::from("src-book.toml");
     if config_path.exists()

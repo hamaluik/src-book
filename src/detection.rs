@@ -22,6 +22,57 @@ pub fn detect_defaults(repo_path: &Path) -> DetectedDefaults {
     }
 }
 
+/// Detect frontmatter files from a list of repository files.
+///
+/// Frontmatter files are documentation and metadata files that should appear
+/// before source code in the book. Returns files in a sensible reading order:
+/// README first, then other docs, then manifest files, then LICENSE last.
+pub fn detect_frontmatter(files: &[PathBuf]) -> Vec<PathBuf> {
+    // ordered by reading priority (README first, LICENSE last)
+    let patterns: &[&[&str]] = &[
+        // readme variants - first thing readers should see
+        &["README.md", "README", "README.txt", "README.rst"],
+        // architecture/design docs
+        &["ARCHITECTURE.md", "ARCHITECTURE", "DESIGN.md", "DESIGN"],
+        // contribution guidelines
+        &["CONTRIBUTING.md", "CONTRIBUTING"],
+        // changelog
+        &["CHANGELOG.md", "CHANGELOG", "HISTORY.md", "HISTORY"],
+        // code of conduct
+        &["CODE_OF_CONDUCT.md", "CODE_OF_CONDUCT"],
+        // security policy
+        &["SECURITY.md", "SECURITY"],
+        // manifest files - project metadata
+        &["Cargo.toml"],
+        &["package.json"],
+        &["pyproject.toml", "setup.py"],
+        &["go.mod"],
+        &["Makefile"],
+        // licence files - last because they're standard boilerplate
+        &["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md", "COPYING"],
+    ];
+
+    let mut frontmatter = Vec::new();
+
+    for group in patterns {
+        for pattern in *group {
+            // match root-level files only (no path separators)
+            if let Some(file) = files.iter().find(|f| {
+                f.to_str()
+                    .map(|s| s.eq_ignore_ascii_case(pattern))
+                    .unwrap_or(false)
+            }) {
+                if !frontmatter.contains(file) {
+                    frontmatter.push(file.clone());
+                }
+                break; // only one file per group
+            }
+        }
+    }
+
+    frontmatter
+}
+
 /// Detect title from directory name.
 ///
 /// Transforms the directory name into a readable title by replacing
@@ -273,5 +324,41 @@ mod tests {
     fn can_match_gpl3_license() {
         let gpl_text = "GNU General Public License\nVersion 3, 29 June 2007";
         assert_eq!(match_license_text(gpl_text), Some("GPL-3.0".to_string()));
+    }
+
+    #[test]
+    fn can_detect_frontmatter_files() {
+        let files = vec![
+            PathBuf::from("src/main.rs"),
+            PathBuf::from("src/lib.rs"),
+            PathBuf::from("README.md"),
+            PathBuf::from("LICENSE"),
+            PathBuf::from("Cargo.toml"),
+            PathBuf::from("CONTRIBUTING.md"),
+        ];
+
+        let frontmatter = detect_frontmatter(&files);
+
+        // should be in order: README, CONTRIBUTING, Cargo.toml, LICENSE
+        assert_eq!(frontmatter.len(), 4);
+        assert_eq!(frontmatter[0], PathBuf::from("README.md"));
+        assert_eq!(frontmatter[1], PathBuf::from("CONTRIBUTING.md"));
+        assert_eq!(frontmatter[2], PathBuf::from("Cargo.toml"));
+        assert_eq!(frontmatter[3], PathBuf::from("LICENSE"));
+    }
+
+    #[test]
+    fn frontmatter_ignores_nested_files() {
+        let files = vec![
+            PathBuf::from("docs/README.md"),
+            PathBuf::from("src/LICENSE"),
+            PathBuf::from("README.md"),
+        ];
+
+        let frontmatter = detect_frontmatter(&files);
+
+        // only root-level README.md should be detected
+        assert_eq!(frontmatter.len(), 1);
+        assert_eq!(frontmatter[0], PathBuf::from("README.md"));
     }
 }

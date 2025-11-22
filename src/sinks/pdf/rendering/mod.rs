@@ -1,8 +1,11 @@
 //! PDF rendering orchestration.
 //!
-//! Coordinates rendering of all book sections: title page, source files, images,
-//! commit history, and table of contents. Manages hierarchical PDF bookmarks
+//! Coordinates rendering of all book sections: title page, frontmatter, source files,
+//! images, commit history, and table of contents. Manages hierarchical PDF bookmarks
 //! for navigation.
+//!
+//! Frontmatter files (README, LICENSE, etc.) are rendered first with their own
+//! bookmark section, providing readers with project context before diving into code.
 
 mod commits;
 mod header;
@@ -69,8 +72,61 @@ impl PDF {
             .borrow_mut()
             .italicized();
 
+        let mut frontmatter_pages: HashMap<PathBuf, usize> = HashMap::new();
         let mut source_pages: HashMap<PathBuf, usize> = HashMap::new();
         let mut page_offset = doc.page_order.len();
+
+        // render frontmatter files first if present
+        if !source.frontmatter_files.is_empty() {
+            let frontmatter_bookmark =
+                doc.add_bookmark(None, "Frontmatter", doc.page_order.len());
+            frontmatter_bookmark.borrow_mut().bolded();
+
+            for file in source.frontmatter_files.iter() {
+                frontmatter_pages.insert(file.clone(), doc.page_order.len() - page_offset);
+
+                match file
+                    .extension()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase()
+                    .to_str()
+                    .unwrap_or_default()
+                {
+                    "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
+                    | "tiff" => {
+                        let page_index = images::render(&self, &mut doc, &font_ids, file)?;
+                        let file_name = file
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| file.display().to_string());
+                        doc.add_bookmark(Some(frontmatter_bookmark.clone()), file_name, page_index);
+                    }
+                    _ => {
+                        if let Some(page_index) = source_file::render(
+                            &self,
+                            &mut doc,
+                            &font_ids,
+                            file,
+                            &ss,
+                            &ts.themes[self.theme.name()],
+                        )
+                        .with_context(|| {
+                            format!("Failed to render frontmatter file {}!", file.display())
+                        })? {
+                            let file_name = file
+                                .file_name()
+                                .map(|n| n.to_string_lossy().to_string())
+                                .unwrap_or_else(|| file.display().to_string());
+                            doc.add_bookmark(
+                                Some(frontmatter_bookmark.clone()),
+                                file_name,
+                                page_index,
+                            );
+                        }
+                    }
+                }
+            }
+        }
 
         let source_code_bookmark = doc.add_bookmark(None, "Source Files", doc.page_order.len());
         {
@@ -145,9 +201,16 @@ impl PDF {
             doc.add_bookmark(None, "Commit History", commit_page);
         }
 
-        let num_toc_pages =
-            table_of_contents::render(&self, &mut doc, &font_ids, page_offset, source_pages, commit_page_index)
-                .with_context(|| "Failed to render table of contents")?;
+        let num_toc_pages = table_of_contents::render(
+            &self,
+            &mut doc,
+            &font_ids,
+            page_offset,
+            frontmatter_pages,
+            source_pages,
+            commit_page_index,
+        )
+        .with_context(|| "Failed to render table of contents")?;
         page_offset += num_toc_pages;
 
         // adjust the page numbering of all our source file bookmarks because we inserted a TOC ahead of them
