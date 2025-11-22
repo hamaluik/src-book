@@ -14,7 +14,134 @@ use pdf_gen::pdf_writer_crate::types::LineCapStyle;
 use pdf_gen::pdf_writer_crate::Content;
 use pdf_gen::*;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// A tree node for the table of contents.
+struct TocEntry {
+    name: String,
+    page: Option<usize>,
+    children: Vec<TocEntry>,
+}
+
+impl TocEntry {
+    fn new_file(name: String, page: usize) -> Self {
+        Self {
+            name,
+            page: Some(page),
+            children: Vec::new(),
+        }
+    }
+
+    fn new_folder(name: String) -> Self {
+        Self {
+            name,
+            page: None,
+            children: Vec::new(),
+        }
+    }
+
+    /// Returns the minimum page number in this subtree (for folder links).
+    fn min_page(&self) -> Option<usize> {
+        if let Some(p) = self.page {
+            return Some(p);
+        }
+        self.children.iter().filter_map(|c| c.min_page()).min()
+    }
+}
+
+/// Builds a tree from a flat mapping of paths to page numbers.
+fn build_tree(source_pages: HashMap<PathBuf, usize>) -> TocEntry {
+    let mut root = TocEntry::new_folder(String::new());
+
+    // sort by page number for consistent ordering
+    let mut entries: Vec<_> = source_pages.into_iter().collect();
+    entries.sort_by_key(|(_, page)| *page);
+
+    for (path, page) in entries {
+        insert_path(&mut root, &path, page);
+    }
+
+    root
+}
+
+/// Inserts a file path into the tree, creating intermediate folders as needed.
+fn insert_path(root: &mut TocEntry, path: &Path, page: usize) {
+    let components: Vec<_> = path.components().collect();
+    let mut current = root;
+
+    for (i, component) in components.iter().enumerate() {
+        let name = component.as_os_str().to_string_lossy().to_string();
+        let is_last = i == components.len() - 1;
+
+        if is_last {
+            // insert the file
+            current.children.push(TocEntry::new_file(name, page));
+        } else {
+            // find or create the folder
+            let folder_name = format!("{}/", name);
+            let pos = current
+                .children
+                .iter()
+                .position(|c| c.name == folder_name && c.page.is_none());
+
+            if let Some(idx) = pos {
+                current = &mut current.children[idx];
+            } else {
+                current.children.push(TocEntry::new_folder(folder_name));
+                let last_idx = current.children.len() - 1;
+                current = &mut current.children[last_idx];
+            }
+        }
+    }
+}
+
+/// A flattened TOC entry ready for rendering.
+struct FlatEntry {
+    prefix: String,
+    name: String,
+    page: usize,
+}
+
+/// Flattens the tree into a list of entries with tree-drawing prefixes.
+fn flatten_tree(root: &TocEntry) -> Vec<FlatEntry> {
+    let mut result = Vec::new();
+
+    // add "Source Code" as root entry
+    if let Some(min_page) = root.min_page() {
+        result.push(FlatEntry {
+            prefix: String::new(),
+            name: "Source Code".to_string(),
+            page: min_page,
+        });
+    }
+
+    flatten_children(&root.children, &mut result, "  ".to_string());
+    result
+}
+
+fn flatten_children(children: &[TocEntry], result: &mut Vec<FlatEntry>, prefix: String) {
+    for (i, child) in children.iter().enumerate() {
+        let is_last = i == children.len() - 1;
+        let connector = if is_last { "└── " } else { "├── " };
+
+        let page = child.page.or_else(|| child.min_page()).unwrap_or(0);
+
+        result.push(FlatEntry {
+            prefix: format!("{}{}", prefix, connector),
+            name: child.name.clone(),
+            page,
+        });
+
+        if !child.children.is_empty() {
+            let child_prefix = if is_last {
+                format!("{}    ", prefix)
+            } else {
+                format!("{}│   ", prefix)
+            };
+            flatten_children(&child.children, result, child_prefix);
+        }
+    }
+}
 
 /// Render the table of contents.
 ///
@@ -63,14 +190,18 @@ pub fn render(
         })
         .unwrap_or_else(|| (Pt(-2.0), Pt(0.5)));
 
-    let mut entries: Vec<(String, usize)> = source_pages
+    // build tree structure and flatten for rendering
+    let tree = build_tree(source_pages);
+    let flat_entries = flatten_tree(&tree);
+
+    let mut entries: Vec<(String, usize)> = flat_entries
         .into_iter()
-        .map(|(path, pi)| (path.display().to_string(), pi))
+        .map(|e| (format!("{}{}", e.prefix, e.name), e.page))
         .collect();
+
     if let Some(git_history_page) = git_history_page {
         entries.push(("Commit History".to_string(), git_history_page - skip_pages));
     }
-    entries.sort_by_key(|(_, p)| *p);
 
     let mut pages: Vec<Page> = Vec::default();
     while !entries.is_empty() {
