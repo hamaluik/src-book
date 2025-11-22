@@ -776,12 +776,10 @@ impl PDF {
                 image_description.push_str(&format!("{w}px by {h}px [{format}]"));
             }
             ImageType::SVG(tree) => {
-                let viewbox = tree.svg_node().view_box.rect;
-                let x = viewbox.x();
-                let y = viewbox.y();
-                let w = viewbox.width();
-                let h = viewbox.height();
-                image_description.push_str(&format!("SVG viewbox: [{x} {y} {w} {h}]"));
+                let size = tree.size();
+                let w = size.width();
+                let h = size.height();
+                image_description.push_str(&format!("SVG size: {w}x{h}"));
             }
         }
 
@@ -1070,7 +1068,7 @@ impl PDF {
             }
 
             self.render_header(doc, font_ids, &mut page, path.display())?;
-            layout::layout_text_naive(&doc, &mut page, start, &mut text, wrap_width, bbox);
+            layout::layout_text_natural(&doc, &mut page, start, &mut text, wrap_width, bbox);
             let page_id = doc.add_page(page);
             if first_page.is_none() {
                 first_page = Some(doc.index_of_page(page_id).expect("page was just added"));
@@ -1187,7 +1185,7 @@ impl PDF {
             }
 
             self.render_header(doc, font_ids, &mut page, "Commit History")?;
-            layout::layout_text_naive(&doc, &mut page, start, &mut text, wrap_width, bbox);
+            layout::layout_text_natural(&doc, &mut page, start, &mut text, wrap_width, bbox);
             let page_id = doc.add_page(page);
             if first_page.is_none() {
                 first_page = Some(doc.index_of_page(page_id).expect("page was just added"));
