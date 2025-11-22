@@ -3,28 +3,43 @@ title = 'src-book'
 repository = '.'
 licenses = ['Apache-2.0']
 source_files = [
-    'README.md',
-    'LICENSE',
+    'Cargo.lock',
     'Cargo.toml',
+    'LICENSE',
+    'README.md',
     'build.rs',
-    'src/main.rs',
+    'assets/syntaxes.bin',
+    'assets/themes.bin',
+    'assets/fonts/FiraMono-Bold.ttf',
+    'assets/fonts/FiraMono-Regular.ttf',
+    'assets/fonts/SourceCodePro-Bold.ttf',
+    'assets/fonts/SourceCodePro-BoldIt.ttf',
+    'assets/fonts/SourceCodePro-It.ttf',
+    'assets/fonts/SourceCodePro-Regular.ttf',
     'src/cli.rs',
     'src/highlight.rs',
-    'src/source/mod.rs',
+    'src/main.rs',
     'src/source/author.rs',
     'src/source/commit.rs',
-    'src/source/providers/mod.rs',
-    'src/source/providers/git_repository.rs',
+    'src/source/mod.rs',
     'src/sinks/pdf/mod.rs',
+    'src/source/providers/git_repository.rs',
+    'src/source/providers/mod.rs',
 ]
 
 [[source.authors]]
 user_names = []
 name = 'Kenton Hamaluik'
 email = 'kenton@hamaluik.ca'
-prominence = 11
+prominence = 13
 
 [pdf]
-font = 'Fira Mono'
-theme = 'OneHalfLight'
+font = 'monospaced'
+theme = 'gruvbox (Light) (Hard)'
 outfile = 'src-book.pdf'
+page_width_in = 5.5
+page_height_in = 8.5
+margin_top_in = 0.5
+margin_outer_in = 0.125
+margin_bottom_in = 0.25
+margin_inner_in = 0.25

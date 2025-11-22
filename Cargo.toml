@@ -20,6 +20,7 @@ log = "0.4"
 clap = { version = "3.2", features = ["derive", "cargo", "env", "unicode", "wrap_help"] }
 globset = "0.4"
 pdf-gen = { path = "../pdf-gen" }
+owned_ttf_parser = "0.15"
 toml = "0.5"
 serde = { version = "1", features = ["derive"] }
 byte-unit = "4"

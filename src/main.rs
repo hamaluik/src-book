@@ -1,4 +1,4 @@
-use crate::sinks::{FontFamily, SyntaxTheme};
+use crate::sinks::SyntaxTheme;
 use crate::source::GitRepository;
 use anyhow::{anyhow, Context, Result};
 use cli::Cli;
@@ -232,17 +232,10 @@ fn try_main() -> Result<()> {
                     .interact()?;
                 let syntax_theme = SyntaxTheme::all()[syntax_theme];
 
-                let font = FuzzySelect::with_theme(&theme)
-                    .with_prompt("Font family")
-                    .items(FontFamily::all())
-                    .default(0)
-                    .interact()?;
-                let font = FontFamily::all()[font];
-
                 pdf = Some(PDF {
                     outfile,
                     theme: syntax_theme,
-                    font,
+                    ..PDF::default()
                 });
             }
 
