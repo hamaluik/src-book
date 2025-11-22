@@ -18,7 +18,11 @@ use syntect::util::LinesWithEndings;
 
 const PAGE_SIZE: (Pt, Pt) = (Pt(5.5 * 72.0), Pt(8.5 * 72.0));
 
-/// Font IDs for the document - populated during render
+/// Font IDs for the document, populated during render.
+///
+/// Syntax highlighting requires all four variants to properly render bold, italic, and
+/// bold-italic code tokens. Fonts that lack certain variants (like FiraMono which has
+/// no italic) fall back to regular/bold as appropriate.
 struct FontIds {
     regular: Id<Font>,
     bold: Id<Font>,
@@ -26,7 +30,12 @@ struct FontIds {
     bold_italic: Id<Font>,
 }
 
-/// Loaded font variants before being added to document
+/// Loaded font data before being added to the document.
+///
+/// Supports three loading modes:
+/// - "SourceCodePro": bundled font with full variant support
+/// - "FiraMono": bundled font with Regular/Bold only (italic falls back)
+/// - "./path/to/Font": custom font loaded from disk using naming conventions
 struct LoadedFonts {
     regular: Font,
     bold: Font,
@@ -190,16 +199,30 @@ impl SyntaxTheme {
     }
 }
 
+/// PDF output configuration.
+///
+/// Margins are asymmetric to support booklet printing: inner margins accommodate
+/// binding, while outer margins can be smaller. Top margins are typically larger
+/// than bottom to leave room for headers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PDF {
+    /// Font family name ("SourceCodePro", "FiraMono") or path to custom font
     pub font: String,
+    /// Syntax highlighting theme for code blocks
     pub theme: SyntaxTheme,
+    /// Output PDF file path
     pub outfile: PathBuf,
+    /// Page width in inches
     pub page_width_in: f32,
+    /// Page height in inches
     pub page_height_in: f32,
+    /// Top margin in inches (typically larger for headers)
     pub margin_top_in: f32,
+    /// Outer margin in inches (away from binding)
     pub margin_outer_in: f32,
+    /// Bottom margin in inches
     pub margin_bottom_in: f32,
+    /// Inner margin in inches (binding/gutter side)
     pub margin_inner_in: f32,
     #[serde(default = "default_font_size_title")]
     pub font_size_title_pt: f32,

@@ -62,6 +62,69 @@ fn sort_paths(root: Option<PathBuf>, mut a: Vec<&OsStr>, mut b: Vec<&OsStr>) -> 
     }
 }
 
+/// Sort files with entrypoint-aware ordering to create a logical reading flow.
+///
+/// When reading source code as a book, starting from the main entry point (e.g., `main.rs`)
+/// and then seeing related files in the same directory creates a natural progression.
+/// This mirrors how developers typically explore unfamiliar codebases.
+///
+/// Ordering priority:
+/// 1. Entrypoint file first (the logical starting point)
+/// 2. Other files in the entrypoint's directory (immediate context)
+/// 3. Subdirectories of the entrypoint's directory (related modules)
+/// 4. Everything else (sorted alphabetically)
+fn sort_with_entrypoint(files: &mut [PathBuf], entrypoint: Option<&PathBuf>) {
+    // First, do the standard sort
+    files.sort_by(|a, b| {
+        let a: Vec<_> = a.iter().collect();
+        let b: Vec<_> = b.iter().collect();
+        sort_paths(None, a, b)
+    });
+
+    // If no entrypoint, we're done
+    let entrypoint = match entrypoint {
+        Some(e) => e,
+        None => return,
+    };
+
+    // Get the entrypoint's parent directory
+    let entrypoint_dir = entrypoint.parent();
+
+    // Sort with entrypoint priority
+    files.sort_by(|a, b| {
+        let a_is_entrypoint = a == entrypoint;
+        let b_is_entrypoint = b == entrypoint;
+
+        // Entrypoint always comes first
+        if a_is_entrypoint && !b_is_entrypoint {
+            return Ordering::Less;
+        }
+        if b_is_entrypoint && !a_is_entrypoint {
+            return Ordering::Greater;
+        }
+
+        // Check if files are in the entrypoint's directory or its subdirectories
+        let a_in_entrypoint_dir = entrypoint_dir
+            .map(|dir| a.starts_with(dir))
+            .unwrap_or(false);
+        let b_in_entrypoint_dir = entrypoint_dir
+            .map(|dir| b.starts_with(dir))
+            .unwrap_or(false);
+
+        // Files in entrypoint directory come before files outside it
+        match (a_in_entrypoint_dir, b_in_entrypoint_dir) {
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            _ => {
+                // Both in or both out of entrypoint dir - use standard sort
+                let a: Vec<_> = a.iter().collect();
+                let b: Vec<_> = b.iter().collect();
+                sort_paths(None, a, b)
+            }
+        }
+    });
+}
+
 fn main() -> ExitCode {
     if let Err(e) = try_main() {
         eprintln!("{}: {e:#}", console::style("Error").red());
@@ -193,11 +256,37 @@ fn try_main() -> Result<()> {
                 .filter(|&f| f != &PathBuf::from("src-book.toml"))
                 .map(Clone::clone)
                 .collect();
-            source_files.sort_by(|a, b| {
-                let a: Vec<_> = a.iter().collect();
-                let b: Vec<_> = b.iter().collect();
-                sort_paths(None, a, b)
-            });
+
+            // Ask for entrypoint file to control ordering
+            let entrypoint = if Confirm::with_theme(&theme)
+                .with_prompt("Do you want to specify an entrypoint file (e.g., src/main.rs) to control file ordering?")
+                .interact()?
+            {
+                // Sort files first so the selection list is in a predictable order
+                source_files.sort_by(|a, b| {
+                    let a: Vec<_> = a.iter().collect();
+                    let b: Vec<_> = b.iter().collect();
+                    sort_paths(None, a, b)
+                });
+
+                let file_strings: Vec<String> = source_files
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect();
+
+                let selection = FuzzySelect::with_theme(&theme)
+                    .with_prompt("Select entrypoint file (files in its directory will be listed first)")
+                    .items(&file_strings)
+                    .default(0)
+                    .interact()?;
+
+                Some(source_files[selection].clone())
+            } else {
+                None
+            };
+
+            // Sort files with entrypoint priority
+            sort_with_entrypoint(&mut source_files, entrypoint.as_ref());
 
             let source = Source {
                 title: Some(title),
@@ -205,6 +294,7 @@ fn try_main() -> Result<()> {
                 source_files,
                 licenses,
                 repository: repo_path,
+                entrypoint,
             };
 
             let mut pdf = None;
