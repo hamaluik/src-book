@@ -1,3 +1,9 @@
+//! Source repository metadata and file discovery.
+//!
+//! This module handles loading files from a git repository, extracting commit history,
+//! and managing author information. The `Source` struct is the central data structure
+//! that gets passed to the PDF renderer.
+
 mod author;
 mod commit;
 use std::path::PathBuf;
@@ -7,6 +13,7 @@ pub use commit::*;
 
 mod providers;
 pub use providers::*;
+use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 
 /// Source metadata and file list for rendering a codebase as a book.
@@ -21,7 +28,7 @@ pub struct Source {
     /// Path to the git repository root
     pub repository: PathBuf,
 
-    /// SPDX license identifiers (e.g., "MIT", "Apache-2.0"). Not validated by default.
+    /// SPDX licence identifiers (e.g., "MIT", "Apache-2.0"). Not validated by default.
     pub licenses: Vec<String>,
 
     /// Optional entrypoint file (e.g., `src/main.rs`) that controls file ordering.
@@ -39,4 +46,45 @@ pub struct Source {
     /// Repository authors extracted from git commit history.
     /// Sorted by prominence (commit count) at render time.
     pub authors: Vec<Author>,
+}
+
+impl Source {
+    /// Load commits from the repository.
+    pub fn commits(&self) -> Result<Vec<Commit>> {
+        // get the repository
+        let repo = git2::Repository::open(&self.repository).with_context(|| {
+            format!(
+                "Failed to open path {} as a git repository!",
+                self.repository.display()
+            )
+        })?;
+
+        let mut walk = repo
+            .revwalk()
+            .with_context(|| "Failed to start walking the repository")?;
+        let head = repo
+            .head()
+            .with_context(|| "Failed to get the repository HEAD")?;
+        let head_oid = head
+            .resolve()
+            .with_context(|| "Failed to resolve HEAD reference")?
+            .target()
+            .ok_or(anyhow!("HEAD doesn't have an OID reference"))?;
+        walk.push(head_oid)
+            .with_context(|| "Failed to push head OID to revwalk")?;
+
+        let mut commits: Vec<Commit> = Vec::default();
+
+        for oid in walk.into_iter() {
+            let oid = oid.with_context(|| "Failed to get OID while walking repository")?;
+            let commit = repo
+                .find_commit(oid)
+                .with_context(|| format!("Failed to find commit for OID {}", oid))?;
+
+            let commit = Commit::from(&commit);
+            commits.push(commit);
+        }
+
+        Ok(commits)
+    }
 }

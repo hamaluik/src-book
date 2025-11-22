@@ -1,11 +1,17 @@
 use super::Author;
 use chrono::prelude::*;
 
+/// A git commit with author, message, and metadata.
+///
+/// Displayed in the commit history section of the generated book.
 pub struct Commit {
     pub author: Author,
+    /// First line of the commit message
     pub summary: Option<String>,
+    /// Remaining lines of the commit message
     pub body: Option<String>,
     pub date: DateTime<FixedOffset>,
+    /// Full SHA-1 hash
     pub hash: String,
 }
 

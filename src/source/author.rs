@@ -1,8 +1,14 @@
+//! Author metadata for repository contributors.
+//!
+//! Authors are extracted from git commit history and sorted by prominence (commit count).
+//! The sorting ensures the most active contributors appear first on the title page.
+
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt;
 
+/// A username on a specific service (e.g., GitHub, sourcehut).
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct UserName {
     pub service: String,
@@ -25,19 +31,30 @@ impl fmt::Display for UserName {
     }
 }
 
+/// A repository contributor with identity and ranking information.
+///
+/// Authors are compared for equality by email or identifier (not by name alone),
+/// and sorted by prominence (ascending, so lower = more important) with role
+/// as a tiebreaker (authors with roles sort after those without).
 #[derive(Builder, Debug, Eq, Default, Clone, Serialize, Deserialize)]
 #[builder(setter(into))]
 pub struct Author {
+    /// Usernames on external services (GitHub, sourcehut, etc.)
     #[builder(setter(each(name = "user_name", into)), default)]
     pub user_names: Vec<UserName>,
+    /// Full name (e.g., "Jane Doe")
     #[builder(setter(into, strip_option), default)]
     pub name: Option<String>,
+    /// Email address
     #[builder(setter(into, strip_option), default)]
     pub email: Option<String>,
+    /// Free-text identifier (used when name/email aren't available)
     #[builder(setter(into, strip_option), default)]
     pub identifier: Option<String>,
+    /// Role or title (e.g., "Maintainer", "Contributor")
     #[builder(setter(into, strip_option), default)]
     pub role: Option<String>,
+    /// Ranking value (typically commit count). Lower values sort first.
     #[builder(default)]
     pub prominence: usize,
 }

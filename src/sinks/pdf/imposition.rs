@@ -1,3 +1,16 @@
+//! Saddle-stitch booklet imposition calculations.
+//!
+//! Imposition is the process of arranging pages on physical sheets so they appear
+//! in the correct order after printing, folding, and binding. For saddle-stitch
+//! binding, sheets are nested inside each other and stapled along the spine.
+//!
+//! A **signature** is a group of nested sheets that form one section of the book.
+//! Each signature contains N logical pages (where N must be divisible by 4) printed
+//! on N/4 physical sheets.
+//!
+//! The imposition formula ensures that when sheets are stacked outer-to-inner and
+//! folded, pages 1, 2, 3, ... N appear in sequence.
+
 use pdf_gen::id_arena_crate::Id;
 use pdf_gen::{FormXObject, FormXObjectLayout, Page, Pt, Transform};
 
@@ -150,7 +163,7 @@ pub fn create_imposed_page(
     let scale_y = *available_height / *config.page_height;
     let scale = scale_x.min(scale_y);
 
-    // center the pages vertically if there's extra space
+    // centre the pages vertically if there's extra space
     let scaled_height = *config.page_height * scale;
     let y_offset = (*available_height - scaled_height) / 2.0;
 

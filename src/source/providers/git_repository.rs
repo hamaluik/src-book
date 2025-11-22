@@ -1,4 +1,4 @@
-use crate::source::{Author, AuthorBuilder, Source};
+use crate::source::{Author, AuthorBuilder};
 use anyhow::{anyhow, Context, Result};
 use globset::GlobMatcher;
 use ignore::Walk;
@@ -128,46 +128,6 @@ impl GitRepository {
             authors,
             source_files,
         })
-    }
-}
-
-impl Source {
-    pub fn commits(&self) -> Result<Vec<crate::source::Commit>> {
-        // get the repository
-        let repo = git2::Repository::open(&self.repository).with_context(|| {
-            format!(
-                "Failed to open path {} as a git repository!",
-                self.repository.display()
-            )
-        })?;
-
-        let mut walk = repo
-            .revwalk()
-            .with_context(|| "Failed to start walking the repository")?;
-        let head = repo
-            .head()
-            .with_context(|| "Failed to get the repository HEAD")?;
-        let head_oid = head
-            .resolve()
-            .with_context(|| "Failed to resolve HEAD reference")?
-            .target()
-            .ok_or(anyhow!("HEAD doesn't have an OID reference"))?;
-        walk.push(head_oid)
-            .with_context(|| "Failed to push head OID to revwalk")?;
-
-        let mut commits: Vec<crate::source::Commit> = Vec::default();
-
-        for oid in walk.into_iter() {
-            let oid = oid.with_context(|| "Failed to get OID while walking repository")?;
-            let commit = repo
-                .find_commit(oid)
-                .with_context(|| format!("Failed to find commit for OID {}", oid))?;
-
-            let commit = crate::source::Commit::from(&commit);
-            commits.push(commit);
-        }
-
-        Ok(commits)
     }
 }
 
