@@ -1,5 +1,5 @@
 [source]
-title = 'src-book'
+title = 'Src Book'
 repository = '.'
 entrypoint = 'src/main.rs'
 commit_order = 'OldestFirst'
@@ -8,6 +8,7 @@ source_files = [
     'src/main.rs',
     'src/cli.rs',
     'src/config_wizard.rs',
+    'src/detection.rs',
     'src/file_ordering.rs',
     'src/highlight.rs',
     'src/source/author.rs',
@@ -46,7 +47,7 @@ source_files = [
 user_names = []
 name = 'Kenton Hamaluik'
 email = 'kenton@hamaluik.ca'
-prominence = 23
+prominence = 24
 
 [pdf]
 font = 'SourceCodePro'

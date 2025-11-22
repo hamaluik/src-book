@@ -4,6 +4,7 @@
 //! through a series of prompts. It extracts authors from git commit history and
 //! allows manual additions with prominence ranking.
 
+use crate::detection::{detect_defaults, DetectedDefaults};
 use crate::file_ordering::{sort_paths, sort_with_entrypoint};
 use crate::sinks::{SyntaxTheme, PDF};
 use crate::source::{AuthorBuilder, CommitOrder, GitRepository, Source};
@@ -29,13 +30,7 @@ pub fn run() -> Result<()> {
         ..ColorfulTheme::default()
     };
 
-    let title = Input::with_theme(&theme)
-        .with_prompt("Book title")
-        .default("".to_string())
-        .allow_empty(false)
-        .interact()
-        .with_context(|| "Failed to obtain title")?;
-
+    // get repo path first so we can detect defaults
     let repo_path = Input::with_theme(&theme)
         .with_prompt("Repository directory")
         .default(".".to_string())
@@ -45,6 +40,20 @@ pub fn run() -> Result<()> {
     if !repo_path.exists() || !repo_path.is_dir() {
         return Err(anyhow!("Path '{}' isn't a directory!", repo_path.display()));
     }
+
+    // detect defaults from project conventions
+    let DetectedDefaults {
+        title: detected_title,
+        entrypoint: detected_entrypoint,
+        licenses: detected_licenses,
+    } = detect_defaults(&repo_path);
+
+    let title = Input::with_theme(&theme)
+        .with_prompt("Book title")
+        .with_initial_text(detected_title.unwrap_or_default())
+        .allow_empty(false)
+        .interact()
+        .with_context(|| "Failed to obtain title")?;
     use globset::{Glob, GlobMatcher};
     let mut block_globs: Vec<GlobMatcher> = Vec::default();
 
@@ -120,10 +129,11 @@ pub fn run() -> Result<()> {
     }
     authors.sort();
 
-    let mut licenses: Vec<String> = Vec::default();
+    // pre-populate with detected licenses
+    let mut licenses: Vec<String> = detected_licenses;
     'licenses: loop {
         if !licenses.is_empty() {
-            println!("Licenses: [{}]", licenses.join("], ["));
+            println!("Licences: [{}]", licenses.join("], ["));
         }
         let license: String = Input::with_theme(&theme)
             .with_prompt("SPDX licence of the repository (leave empty for done)")
@@ -144,10 +154,12 @@ pub fn run() -> Result<()> {
         .collect();
 
     // ask for entrypoint file to control ordering
+    // default to yes if we detected an entrypoint
     let entrypoint = if Confirm::with_theme(&theme)
         .with_prompt(
             "Do you want to specify an entrypoint file (e.g., src/main.rs) to control file ordering?",
         )
+        .default(detected_entrypoint.is_some())
         .interact()?
     {
         // sort files first so the selection list is in a predictable order
@@ -162,10 +174,16 @@ pub fn run() -> Result<()> {
             .map(|p| p.display().to_string())
             .collect();
 
+        // pre-select detected entrypoint if it exists in file list
+        let default_idx = detected_entrypoint
+            .as_ref()
+            .and_then(|ep| source_files.iter().position(|f| f == ep))
+            .unwrap_or(0);
+
         let selection = FuzzySelect::with_theme(&theme)
             .with_prompt("Select entrypoint file (files in its directory will be listed first)")
             .items(&file_strings)
-            .default(0)
+            .default(default_idx)
             .interact()?;
 
         Some(source_files[selection].clone())

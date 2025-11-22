@@ -5,6 +5,7 @@ use std::process::ExitCode;
 
 mod cli;
 mod config_wizard;
+mod detection;
 mod file_ordering;
 mod highlight;
 mod sinks {

@@ -1627,6 +1627,7 @@ dependencies = [
  "owned_ttf_parser",
  "pdf-gen",
  "serde",
+ "serde_json",
  "syntect",
  "toml",
 ]
