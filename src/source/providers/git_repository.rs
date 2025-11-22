@@ -1,4 +1,3 @@
-use super::SourceProvider;
 use crate::source::{Author, AuthorBuilder, Source};
 use anyhow::{anyhow, Context, Result};
 use globset::GlobMatcher;
@@ -9,7 +8,6 @@ use std::path::PathBuf;
 #[derive(Debug)]
 pub struct GitRepository {
     pub _root: PathBuf,
-    pub title: String,
     pub authors: Vec<Author>,
     pub source_files: Vec<PathBuf>,
 }
@@ -41,19 +39,6 @@ impl GitRepository {
                 root.display()
             )
         })?;
-
-        // if the title isn't set, default to the name of the folder of 'root'
-        let title = {
-            match root.file_name() {
-                Some(name) => name.to_string_lossy().to_string(),
-                None => {
-                    return Err(anyhow!(
-                        "Repository {} doesn't have a name?",
-                        root.display()
-                    ))
-                }
-            }
-        };
 
         // load the authors from commits
         let authors = {
@@ -140,28 +125,9 @@ impl GitRepository {
 
         Ok(GitRepository {
             _root: root,
-            title,
             authors,
             source_files,
         })
-    }
-}
-
-impl SourceProvider for GitRepository {
-    fn apply(&self, source: &mut Source) -> Result<()> {
-        if source.title.is_none() {
-            source.title = Some(self.title.clone());
-        }
-
-        for author in self.authors.iter() {
-            source.authors.push(author.to_owned());
-        }
-
-        for source_file in self.source_files.iter() {
-            source.source_files.push(source_file.to_owned());
-        }
-
-        Ok(())
     }
 }
 

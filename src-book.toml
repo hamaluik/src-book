@@ -34,7 +34,7 @@ email = 'kenton@hamaluik.ca'
 prominence = 13
 
 [pdf]
-font = 'monospaced'
+font = 'FiraMono'
 theme = 'gruvbox (Light) (Hard)'
 outfile = 'src-book.pdf'
 page_width_in = 5.5
