@@ -114,7 +114,9 @@ impl GitRepository {
             for entry in Walk::new(&root) {
                 let entry = entry.with_context(|| "Failed to walk repository directory")?;
 
-                let blocked = block.iter().any(|glob| glob.is_match(entry.path()));
+                // match against relative path so globs like "Cargo.lock" work
+                let rel_path = entry.path().strip_prefix(&root).unwrap_or(entry.path());
+                let blocked = block.iter().any(|glob| glob.is_match(rel_path));
                 if !blocked {
                     push_path(entry.into_path())?;
                 }

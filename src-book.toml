@@ -28,7 +28,6 @@ source_files = [
     'src/sinks/pdf/rendering/source_file.rs',
     'src/sinks/pdf/rendering/table_of_contents.rs',
     'src/sinks/pdf/rendering/title_page.rs',
-    'Cargo.lock',
     'Cargo.toml',
     'LICENSE',
     'README.md',
@@ -47,7 +46,7 @@ source_files = [
 user_names = []
 name = 'Kenton Hamaluik'
 email = 'kenton@hamaluik.ca'
-prominence = 24
+prominence = 25
 
 [pdf]
 font = 'SourceCodePro'
