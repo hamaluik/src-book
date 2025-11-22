@@ -8,9 +8,11 @@ use pdf_gen::pdf_writer_crate::types::LineCapStyle;
 use pdf_gen::pdf_writer_crate::Content;
 use pdf_gen::*;
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{FontStyle, Style, ThemeSet};
 use syntect::parsing::SyntaxSet;
@@ -325,6 +327,58 @@ impl PDF {
             source_code_bookmark.borrow_mut().bolded();
         }
 
+        // track folder bookmarks for hierarchical structure
+        let mut folder_bookmarks: HashMap<PathBuf, Rc<RefCell<OutlineEntry>>> = HashMap::new();
+
+        /// get or create folder bookmarks for all ancestor directories of a file path,
+        /// returning the immediate parent folder's bookmark
+        fn get_or_create_folder_bookmark(
+            doc: &mut Document,
+            folder_bookmarks: &mut HashMap<PathBuf, Rc<RefCell<OutlineEntry>>>,
+            root_bookmark: &Rc<RefCell<OutlineEntry>>,
+            file_path: &Path,
+            page_index: usize,
+        ) -> Rc<RefCell<OutlineEntry>> {
+            let parent = match file_path.parent() {
+                Some(p) if !p.as_os_str().is_empty() => p,
+                _ => return root_bookmark.clone(),
+            };
+
+            // collect all ancestor paths that need bookmarks
+            let mut ancestors: Vec<&Path> = Vec::new();
+            let mut current = parent;
+            while !current.as_os_str().is_empty() {
+                if !folder_bookmarks.contains_key(current) {
+                    ancestors.push(current);
+                }
+                current = match current.parent() {
+                    Some(p) => p,
+                    None => break,
+                };
+            }
+
+            // create bookmarks from root to leaf (reverse order)
+            for ancestor in ancestors.into_iter().rev() {
+                let parent_bookmark = match ancestor.parent() {
+                    Some(p) if !p.as_os_str().is_empty() => {
+                        folder_bookmarks.get(p).cloned().unwrap_or_else(|| root_bookmark.clone())
+                    }
+                    _ => root_bookmark.clone(),
+                };
+
+                // use just the folder name with trailing slash for display
+                let folder_name = ancestor
+                    .file_name()
+                    .map(|n| format!("{}/", n.to_string_lossy()))
+                    .unwrap_or_else(|| format!("{}/", ancestor.display()));
+
+                let bookmark = doc.add_bookmark(Some(parent_bookmark), folder_name, page_index);
+                folder_bookmarks.insert(ancestor.to_path_buf(), bookmark);
+            }
+
+            folder_bookmarks.get(parent).cloned().unwrap_or_else(|| root_bookmark.clone())
+        }
+
         for file in source.source_files.iter() {
             source_pages.insert(file.clone(), doc.page_order.len() - page_offset);
 
@@ -339,11 +393,17 @@ impl PDF {
                 "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
                 | "tiff" => {
                     let page_index = self.render_image(&mut doc, &font_ids, file)?;
-                    doc.add_bookmark(
-                        Some(source_code_bookmark.clone()),
-                        file.display(),
+                    let parent_bookmark = get_or_create_folder_bookmark(
+                        &mut doc,
+                        &mut folder_bookmarks,
+                        &source_code_bookmark,
+                        file,
                         page_index,
                     );
+                    let file_name = file.file_name()
+                        .map(|n| n.to_string_lossy().to_string())
+                        .unwrap_or_else(|| file.display().to_string());
+                    doc.add_bookmark(Some(parent_bookmark), file_name, page_index);
                 }
                 _ => {
                     if let Some(page_index) = self
@@ -352,11 +412,17 @@ impl PDF {
                             format!("Failed to render source file {}!", file.display())
                         })?
                     {
-                        doc.add_bookmark(
-                            Some(source_code_bookmark.clone()),
-                            file.display(),
+                        let parent_bookmark = get_or_create_folder_bookmark(
+                            &mut doc,
+                            &mut folder_bookmarks,
+                            &source_code_bookmark,
+                            file,
                             page_index,
                         );
+                        let file_name = file.file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| file.display().to_string());
+                        doc.add_bookmark(Some(parent_bookmark), file_name, page_index);
                     }
                 }
             }
