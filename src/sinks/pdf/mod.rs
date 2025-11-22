@@ -14,34 +14,11 @@ use syntect::highlighting::{FontStyle, Style, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
-const PAGE_SIZE: (Pt, Pt) = (Pt(7.0 * 72.0), Pt(8.5 * 72.0));
+const PAGE_SIZE: (Pt, Pt) = (Pt(5.5 * 72.0), Pt(8.5 * 72.0));
 const FONT_INDEX_REGULAR: usize = 0;
 const FONT_INDEX_BOLD: usize = 1;
 const FONT_INDEX_ITALIC: usize = 2;
 const FONT_INDEX_BOLDITALIC: usize = 3;
-
-#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
-pub enum FontFamily {
-    #[serde(rename = "Fira Mono")]
-    FiraMono,
-    #[serde(rename = "Source Code Pro")]
-    SourceCodePro,
-}
-
-impl fmt::Display for FontFamily {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            FontFamily::FiraMono => write!(f, "Fira Mono"),
-            FontFamily::SourceCodePro => write!(f, "Source Code Pro"),
-        }
-    }
-}
-
-impl FontFamily {
-    pub fn all() -> &'static [FontFamily] {
-        &[FontFamily::FiraMono, FontFamily::SourceCodePro]
-    }
-}
 
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub enum SyntaxTheme {
@@ -83,15 +60,31 @@ impl SyntaxTheme {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PDF {
-    pub font: FontFamily,
+    pub font: String,
     pub theme: SyntaxTheme,
     pub outfile: PathBuf,
-    /*tab_size: usize,
-    reduce_spaces: bool,
-    native_tab_size: usize,
-    page_width_in: f32,
-    page_height_in: f32,
-    margin_top_in: f32,*/
+    pub page_width_in: f32,
+    pub page_height_in: f32,
+    pub margin_top_in: f32,
+    pub margin_outer_in: f32,
+    pub margin_bottom_in: f32,
+    pub margin_inner_in: f32,
+}
+
+impl Default for PDF {
+    fn default() -> Self {
+        PDF {
+            font: "monospaced".to_string(),
+            theme: SyntaxTheme::GitHub,
+            outfile: PathBuf::from("book.pdf"),
+            page_width_in: 5.5,
+            page_height_in: 8.5,
+            margin_top_in: 0.5,
+            margin_outer_in: 0.125,
+            margin_bottom_in: 0.25,
+            margin_inner_in: 0.25,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -100,65 +93,14 @@ mod test {
 
     #[test]
     fn can_serialize_pdf() {
-        let pdf = PDF {
-            font: FontFamily::FiraMono,
-            theme: SyntaxTheme::SolarizedLight,
-            outfile: PathBuf::new(),
-        };
+        let pdf = PDF::default();
         toml::to_string(&pdf).expect("can serialize PDF to TOML");
     }
 }
 
 impl PDF {
     pub fn render(&self, source: &crate::source::Source) -> Result<()> {
-        let (regular, bold, italic, bold_italic) = match self.font {
-            FontFamily::FiraMono => {
-                let regular = Font::load(include_bytes!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/assets/fonts/FiraMono-Regular.ttf"
-                )))
-                .with_context(|| "Failed to load FiraMono-Regular font!")?;
-                let bold = Font::load(include_bytes!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/assets/fonts/FiraMono-Bold.ttf"
-                )))
-                .with_context(|| "Failed to load FiraMono-Bold font!")?;
-                let italic = Font::load(include_bytes!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/assets/fonts/FiraMono-Regular.ttf"
-                )))
-                .with_context(|| "Failed to load FiraMono- font!")?;
-                let bold_italic = Font::load(include_bytes!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/assets/fonts/FiraMono-Bold.ttf"
-                )))
-                .with_context(|| "Failed to load FiraMono-Bold font!")?;
-                (regular, bold, italic, bold_italic)
-            }
-            FontFamily::SourceCodePro => {
-                let regular = Font::load(include_bytes!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/assets/fonts/SourceCodePro-Regular.ttf"
-                )))
-                .with_context(|| "Failed to load SourceCodePro-Regular font!")?;
-                let bold = Font::load(include_bytes!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/assets/fonts/SourceCodePro-Bold.ttf"
-                )))
-                .with_context(|| "Failed to load SourceCodePro-Bold font!")?;
-                let italic = Font::load(include_bytes!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/assets/fonts/SourceCodePro-It.ttf"
-                )))
-                .with_context(|| "Failed to load SourceCodePro-It font!")?;
-                let bold_italic = Font::load(include_bytes!(concat!(
-                    env!("CARGO_MANIFEST_DIR"),
-                    "/assets/fonts/SourceCodePro-BoldIt.ttf"
-                )))
-                .with_context(|| "Failed to load SourceCodePro-BoldIt font!")?;
-                (regular, bold, italic, bold_italic)
-            }
-        };
+        let (regular, bold, italic, bold_italic) = todo!();
 
         let ss: SyntaxSet = bincode::deserialize(crate::highlight::SERIALIZED_SYNTAX)
             .expect("can deserialize syntaxes");
@@ -317,7 +259,9 @@ impl PDF {
         let descent_title = doc.fonts[FONT_INDEX_BOLD].descent(SIZE_TITLE);
 
         let title = source.title.clone().unwrap_or("untitled".to_string());
-        let authors: Vec<String> = source.authors.iter().map(ToString::to_string).collect();
+        let mut authors = source.authors.clone();
+        authors.sort();
+        let authors: Vec<String> = authors.iter().map(ToString::to_string).collect();
 
         let height_title = doc.fonts[FONT_INDEX_BOLD].line_height(SIZE_TITLE);
         let height_by = doc.fonts[FONT_INDEX_REGULAR].line_height(SIZE_BY);
@@ -915,7 +859,7 @@ impl PDF {
                 In(0.5).into(),
                 In(0.25).into(),
             )
-            .with_gutter(In(0.25).into(), doc.pages.len());
+            .with_gutter(In(0.25).into(), doc.pages.len() - 1);
             let page_size = PAGE_SIZE;
 
             // insert a blank page so we open to the correct side
