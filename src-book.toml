@@ -1,19 +1,32 @@
 [source]
 title = 'src-book'
 repository = '.'
-licenses = ['Apache-2.0']
 entrypoint = 'src/main.rs'
+commit_order = 'OldestFirst'
+licenses = ['Apache-2.0']
 source_files = [
     'src/main.rs',
     'src/cli.rs',
+    'src/config_wizard.rs',
+    'src/file_ordering.rs',
     'src/highlight.rs',
     'src/source/author.rs',
     'src/source/commit.rs',
     'src/source/mod.rs',
+    'src/sinks/pdf/booklet.rs',
+    'src/sinks/pdf/config.rs',
+    'src/sinks/pdf/fonts.rs',
     'src/sinks/pdf/imposition.rs',
     'src/sinks/pdf/mod.rs',
     'src/source/providers/git_repository.rs',
     'src/source/providers/mod.rs',
+    'src/sinks/pdf/rendering/commits.rs',
+    'src/sinks/pdf/rendering/header.rs',
+    'src/sinks/pdf/rendering/images.rs',
+    'src/sinks/pdf/rendering/mod.rs',
+    'src/sinks/pdf/rendering/source_file.rs',
+    'src/sinks/pdf/rendering/table_of_contents.rs',
+    'src/sinks/pdf/rendering/title_page.rs',
     'Cargo.lock',
     'Cargo.toml',
     'LICENSE',
@@ -33,7 +46,7 @@ source_files = [
 user_names = []
 name = 'Kenton Hamaluik'
 email = 'kenton@hamaluik.ca'
-prominence = 20
+prominence = 23
 
 [pdf]
 font = 'SourceCodePro'

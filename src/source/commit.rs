@@ -1,5 +1,39 @@
 use super::Author;
 use chrono::prelude::*;
+use serde::{Deserialize, Serialize};
+
+/// Controls whether and how commit history appears in the generated book.
+#[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub enum CommitOrder {
+    /// Most recent commits appear first (default)
+    #[default]
+    NewestFirst,
+    /// Oldest commits appear first (chronological)
+    OldestFirst,
+    /// No commit history included
+    Disabled,
+}
+
+impl CommitOrder {
+    /// All available commit order options for selection UI.
+    pub fn all() -> &'static [CommitOrder] {
+        &[
+            CommitOrder::NewestFirst,
+            CommitOrder::OldestFirst,
+            CommitOrder::Disabled,
+        ]
+    }
+}
+
+impl std::fmt::Display for CommitOrder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            CommitOrder::NewestFirst => write!(f, "Newest first"),
+            CommitOrder::OldestFirst => write!(f, "Oldest first"),
+            CommitOrder::Disabled => write!(f, "Disabled"),
+        }
+    }
+}
 
 /// A git commit with author, message, and metadata.
 ///

@@ -6,7 +6,7 @@
 
 use crate::file_ordering::{sort_paths, sort_with_entrypoint};
 use crate::sinks::{SyntaxTheme, PDF};
-use crate::source::{AuthorBuilder, GitRepository, Source};
+use crate::source::{AuthorBuilder, CommitOrder, GitRepository, Source};
 use anyhow::{anyhow, Context, Result};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Confirm, FuzzySelect, Input};
@@ -176,6 +176,18 @@ pub fn run() -> Result<()> {
     // sort files with entrypoint priority
     sort_with_entrypoint(&mut source_files, entrypoint.as_ref());
 
+    // ask about commit history ordering
+    let commit_order_options: Vec<String> = CommitOrder::all()
+        .iter()
+        .map(|o| o.to_string())
+        .collect();
+    let commit_order_idx = FuzzySelect::with_theme(&theme)
+        .with_prompt("Commit history order")
+        .items(&commit_order_options)
+        .default(0)
+        .interact()?;
+    let commit_order = CommitOrder::all()[commit_order_idx];
+
     let source = Source {
         title: Some(title),
         authors,
@@ -183,6 +195,7 @@ pub fn run() -> Result<()> {
         licenses,
         repository: repo_path,
         entrypoint,
+        commit_order,
     };
 
     let mut pdf = None;
