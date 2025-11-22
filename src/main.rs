@@ -16,7 +16,7 @@ mod cli;
 mod highlight;
 mod sinks {
     mod pdf;
-    pub use pdf::*;
+    pub use pdf::{SyntaxTheme, PDF};
 }
 mod source;
 
@@ -334,6 +334,53 @@ fn try_main() -> Result<()> {
                 let font_size_body_pt = base_font_size.round();
                 let font_size_small_pt = (base_font_size * 0.8).round();
 
+                // Ask about booklet generation
+                let booklet_outfile = if Confirm::with_theme(&theme)
+                    .with_prompt("Generate a print-ready booklet PDF for saddle-stitch binding?")
+                    .default(false)
+                    .interact()?
+                {
+                    let booklet_path: String = Input::with_theme(&theme)
+                        .with_prompt("Booklet output file")
+                        .default(
+                            outfile.with_extension("").to_string_lossy().to_string()
+                                + "-booklet.pdf",
+                        )
+                        .interact()?;
+                    Some(PathBuf::from(booklet_path))
+                } else {
+                    None
+                };
+
+                let (booklet_signature_size, booklet_sheet_width_in, booklet_sheet_height_in) =
+                    if booklet_outfile.is_some() {
+                        let sig_size: u32 = Input::with_theme(&theme)
+                            .with_prompt("Pages per signature (must be divisible by 4)")
+                            .default(16)
+                            .validate_with(|input: &u32| {
+                                if *input % 4 == 0 && *input > 0 {
+                                    Ok(())
+                                } else {
+                                    Err("Signature size must be a positive multiple of 4")
+                                }
+                            })
+                            .interact()?;
+
+                        let sheet_width: f32 = Input::with_theme(&theme)
+                            .with_prompt("Physical sheet width in inches (e.g., 11.0 for US Letter landscape)")
+                            .default(11.0)
+                            .interact()?;
+
+                        let sheet_height: f32 = Input::with_theme(&theme)
+                            .with_prompt("Physical sheet height in inches (e.g., 8.5 for US Letter landscape)")
+                            .default(8.5)
+                            .interact()?;
+
+                        (sig_size, sheet_width, sheet_height)
+                    } else {
+                        (16, 11.0, 8.5)
+                    };
+
                 pdf = Some(PDF {
                     outfile,
                     theme: syntax_theme,
@@ -342,6 +389,10 @@ fn try_main() -> Result<()> {
                     font_size_subheading_pt,
                     font_size_body_pt,
                     font_size_small_pt,
+                    booklet_outfile,
+                    booklet_signature_size,
+                    booklet_sheet_width_in,
+                    booklet_sheet_height_in,
                     ..PDF::default()
                 });
             }
@@ -369,17 +420,59 @@ fn try_main() -> Result<()> {
             println!("Loading configuration...");
             let contents = std::fs::read_to_string("src-book.toml")
                 .with_context(|| "Failed to load src-book.toml contents")?;
-            let config = toml::from_str(&contents).with_context(|| "Failed to parse TOML")?;
+            let config: Configuration =
+                toml::from_str(&contents).with_context(|| "Failed to parse TOML")?;
 
             let Configuration { source, pdf } = config;
 
             if let Some(pdf) = pdf {
                 println!("Rendering PDF to {}...", pdf.outfile.display());
-                pdf.render(&source)
+                let stats = pdf
+                    .render(&source)
                     .with_context(|| "Failed to render PDF")?;
-            }
 
-            println!("Done!");
+                println!("Done!\n");
+                println!("  Main PDF:    {}", pdf.outfile.display());
+
+                if let (Some(booklet_path), Some(sheets)) =
+                    (&pdf.booklet_outfile, stats.booklet_sheets)
+                {
+                    println!("  Booklet PDF: {}\n", booklet_path.display());
+
+                    let booklet_pages = stats.page_count / 2 + stats.page_count % 2;
+                    let sheets_per_sig = pdf.booklet_signature_size / 4;
+                    let booklet_pages_per_sig = pdf.booklet_signature_size / 2;
+
+                    println!("Booklet info:");
+                    println!("  Original pages:   {}", stats.page_count);
+                    println!(
+                        "  Booklet pages:    {} (2 original pages per booklet page)",
+                        booklet_pages
+                    );
+                    println!(
+                        "  Sheets needed:    {} (4 original pages per sheet)",
+                        sheets
+                    );
+                    println!(
+                        "  Signature size:   {} original pages ({} sheets per signature)\n",
+                        pdf.booklet_signature_size, sheets_per_sig
+                    );
+
+                    println!("To print the booklet:");
+                    println!("  1. Print double-sided, flip on short edge");
+                    println!(
+                        "  2. Print {} booklet pages at a time (one {}-page signature = {} sheets)",
+                        booklet_pages_per_sig, pdf.booklet_signature_size, sheets_per_sig
+                    );
+                    println!(
+                        "  3. For each signature: nest the {} sheets together and fold in half",
+                        sheets_per_sig
+                    );
+                    println!("  4. Stack all signatures and sew/staple along the spine");
+                }
+            } else {
+                println!("No PDF output configured.");
+            }
         }
     }
 

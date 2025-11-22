@@ -1,6 +1,9 @@
+mod imposition;
+
 use crate::source::{Commit, Source};
 use anyhow::{anyhow, Context, Result};
 use chrono::TimeZone;
+use imposition::{BookletConfig, calculate_imposition, create_imposed_page};
 use owned_ttf_parser::AsFaceRef;
 use pdf_gen::id_arena_crate::Id;
 use pdf_gen::layout::Margins;
@@ -236,6 +239,18 @@ pub struct PDF {
     pub font_size_body_pt: f32,
     #[serde(default = "default_font_size_small")]
     pub font_size_small_pt: f32,
+    /// Output path for the print-ready booklet PDF (if None, booklet not generated)
+    #[serde(default)]
+    pub booklet_outfile: Option<PathBuf>,
+    /// Number of pages per signature (must be divisible by 4). Default is 16.
+    #[serde(default = "default_booklet_signature_size")]
+    pub booklet_signature_size: u32,
+    /// Physical sheet width in inches for booklet printing (default 11.0 for US Letter landscape)
+    #[serde(default = "default_booklet_sheet_width")]
+    pub booklet_sheet_width_in: f32,
+    /// Physical sheet height in inches for booklet printing (default 8.5 for US Letter landscape)
+    #[serde(default = "default_booklet_sheet_height")]
+    pub booklet_sheet_height_in: f32,
 }
 
 fn default_font_size_title() -> f32 { 32.0 }
@@ -243,6 +258,9 @@ fn default_font_size_heading() -> f32 { 24.0 }
 fn default_font_size_subheading() -> f32 { 12.0 }
 fn default_font_size_body() -> f32 { 10.0 }
 fn default_font_size_small() -> f32 { 8.0 }
+fn default_booklet_signature_size() -> u32 { 16 }
+fn default_booklet_sheet_width() -> f32 { 11.0 }
+fn default_booklet_sheet_height() -> f32 { 8.5 }
 
 impl Default for PDF {
     fn default() -> Self {
@@ -261,6 +279,10 @@ impl Default for PDF {
             font_size_subheading_pt: default_font_size_subheading(),
             font_size_body_pt: default_font_size_body(),
             font_size_small_pt: default_font_size_small(),
+            booklet_outfile: None,
+            booklet_signature_size: default_booklet_signature_size(),
+            booklet_sheet_width_in: default_booklet_sheet_width(),
+            booklet_sheet_height_in: default_booklet_sheet_height(),
         }
     }
 }
@@ -276,8 +298,16 @@ mod test {
     }
 }
 
+/// Statistics from rendering a PDF, used for user feedback.
+pub struct RenderStats {
+    /// Number of pages in the main PDF
+    pub page_count: usize,
+    /// If a booklet was generated, the number of sheets needed
+    pub booklet_sheets: Option<usize>,
+}
+
 impl PDF {
-    pub fn render(&self, source: &crate::source::Source) -> Result<()> {
+    pub fn render(&self, source: &crate::source::Source) -> Result<RenderStats> {
         // Load fonts based on configuration
         let fonts = LoadedFonts::load(&self.font)
             .with_context(|| format!("Failed to load font '{}'", self.font))?;
@@ -488,13 +518,149 @@ impl PDF {
             });
         }
 
+        let page_count = doc.page_order.len();
+
+        // generate booklet PDF if configured
+        let booklet_sheets = if let Some(booklet_path) = &self.booklet_outfile {
+            let sheets = self.render_booklet(&doc, &font_ids, booklet_path)
+                .with_context(|| "Failed to render booklet PDF")?;
+            Some(sheets)
+        } else {
+            None
+        };
+
         let file =
             std::fs::File::create(&self.outfile).with_context(|| "Failed to create output file")?;
         let mut file = std::io::BufWriter::new(file);
         doc.write(&mut file)
             .with_context(|| "Failed to render PDF")?;
 
-        Ok(())
+        Ok(RenderStats {
+            page_count,
+            booklet_sheets,
+        })
+    }
+
+    /// Generate a print-ready booklet PDF from the digital document.
+    ///
+    /// This creates Form XObjects from each page's content and arranges them
+    /// 2-up on larger sheets according to saddle-stitch signature imposition.
+    ///
+    /// Returns the number of physical sheets needed to print the booklet.
+    fn render_booklet(
+        &self,
+        source_doc: &Document,
+        source_font_ids: &FontIds,
+        output_path: &PathBuf,
+    ) -> Result<usize> {
+        let page_width = Pt(self.page_width_in * 72.0);
+        let page_height = Pt(self.page_height_in * 72.0);
+        let sheet_width = Pt(self.booklet_sheet_width_in * 72.0);
+        let sheet_height = Pt(self.booklet_sheet_height_in * 72.0);
+
+        let config = BookletConfig {
+            signature_size: self.booklet_signature_size,
+            sheet_width,
+            sheet_height,
+            page_width,
+            page_height,
+        };
+
+        // create a new document for the booklet
+        let mut booklet_doc = Document::default();
+
+        // reload fonts for the booklet document (fonts can't be cloned)
+        let fonts = LoadedFonts::load(&self.font)
+            .with_context(|| format!("Failed to reload font '{}' for booklet", self.font))?;
+        let booklet_font_ids = FontIds {
+            regular: booklet_doc.add_font(fonts.regular),
+            bold: booklet_doc.add_font(fonts.bold),
+            italic: booklet_doc.add_font(fonts.italic),
+            bold_italic: booklet_doc.add_font(fonts.bold_italic),
+        };
+
+        // TODO: track image paths during initial rendering to enable booklet image support
+        // for now, images won't be rendered in the booklet (only text content)
+
+        // create Form XObjects from each source page
+        let mut page_xobjs: Vec<Id<FormXObject>> = Vec::new();
+        for page_id in source_doc.page_order.iter() {
+            let page = &source_doc.pages[*page_id];
+            let mut xobj = FormXObject::new(page.media_box.x2, page.media_box.y2);
+
+            // copy page contents to the form xobject
+            for content in page.contents.iter() {
+                match content {
+                    PageContents::Text(spans) => {
+                        for span in spans {
+                            // remap font ids to the booklet document
+                            let new_font_id = if span.font.id == source_font_ids.regular {
+                                booklet_font_ids.regular
+                            } else if span.font.id == source_font_ids.bold {
+                                booklet_font_ids.bold
+                            } else if span.font.id == source_font_ids.italic {
+                                booklet_font_ids.italic
+                            } else {
+                                booklet_font_ids.bold_italic
+                            };
+                            xobj.add_span(SpanLayout {
+                                text: span.text.clone(),
+                                font: SpanFont {
+                                    id: new_font_id,
+                                    size: span.font.size,
+                                },
+                                colour: span.colour,
+                                coords: span.coords,
+                            });
+                        }
+                    }
+                    PageContents::Image(_img) => {
+                        // images cannot be easily cloned; skip for now
+                        // the booklet will show text content only
+                        // TODO: implement image support by tracking source paths
+                    }
+                    PageContents::RawContent(raw) => {
+                        xobj.add_raw_content(raw.clone());
+                    }
+                    PageContents::FormXObject(_) => {
+                        // nested form xobjects not supported in this context
+                    }
+                }
+            }
+
+            let xobj_id = booklet_doc.add_form_xobject(xobj);
+            page_xobjs.push(xobj_id);
+        }
+
+        // calculate imposition layout
+        let total_pages = page_xobjs.len();
+        let sheets = calculate_imposition(total_pages, self.booklet_signature_size);
+
+        let sheet_count = sheets.len();
+
+        // create imposed pages (each sheet side becomes a page)
+        for sheet in sheets.iter() {
+            // front side
+            let front_left = sheet.front.left_page.map(|idx| page_xobjs[idx]);
+            let front_right = sheet.front.right_page.map(|idx| page_xobjs[idx]);
+            let front_page = create_imposed_page(&config, front_left, front_right);
+            booklet_doc.add_page(front_page);
+
+            // back side
+            let back_left = sheet.back.left_page.map(|idx| page_xobjs[idx]);
+            let back_right = sheet.back.right_page.map(|idx| page_xobjs[idx]);
+            let back_page = create_imposed_page(&config, back_left, back_right);
+            booklet_doc.add_page(back_page);
+        }
+
+        // write the booklet PDF
+        let file = std::fs::File::create(output_path)
+            .with_context(|| format!("Failed to create booklet output file: {}", output_path.display()))?;
+        let mut file = std::io::BufWriter::new(file);
+        booklet_doc.write(&mut file)
+            .with_context(|| "Failed to write booklet PDF")?;
+
+        Ok(sheet_count)
     }
 
     fn render_title_page(&self, doc: &mut Document, font_ids: &FontIds, source: &Source) -> Result<()> {
