@@ -1,5 +1,5 @@
 use crate::source::{Commit, Source};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::TimeZone;
 use owned_ttf_parser::AsFaceRef;
 use pdf_gen::id_arena_crate::Id;
@@ -24,6 +24,132 @@ struct FontIds {
     bold: Id<Font>,
     italic: Id<Font>,
     bold_italic: Id<Font>,
+}
+
+/// Loaded font variants before being added to document
+struct LoadedFonts {
+    regular: Font,
+    bold: Font,
+    italic: Font,
+    bold_italic: Font,
+}
+
+impl LoadedFonts {
+    /// Load fonts based on font name configuration.
+    ///
+    /// Supports:
+    /// - "SourceCodePro" - bundled font with all 4 variants
+    /// - "FiraMono" - bundled font (Regular/Bold only, falls back for italic)
+    /// - Path like "./fonts/MyFont" - loads MyFont-Regular.ttf, MyFont-Bold.ttf, etc.
+    fn load(font_name: &str) -> Result<LoadedFonts> {
+        match font_name {
+            "SourceCodePro" => Self::load_source_code_pro(),
+            "FiraMono" => Self::load_fira_mono(),
+            _ => Self::load_from_path(font_name),
+        }
+    }
+
+    fn load_source_code_pro() -> Result<LoadedFonts> {
+        let regular = Font::load(include_bytes!("../../../assets/fonts/SourceCodePro-Regular.ttf").to_vec())
+            .with_context(|| "Failed to load SourceCodePro-Regular.ttf")?;
+        let bold = Font::load(include_bytes!("../../../assets/fonts/SourceCodePro-Bold.ttf").to_vec())
+            .with_context(|| "Failed to load SourceCodePro-Bold.ttf")?;
+        let italic = Font::load(include_bytes!("../../../assets/fonts/SourceCodePro-It.ttf").to_vec())
+            .with_context(|| "Failed to load SourceCodePro-It.ttf")?;
+        let bold_italic = Font::load(include_bytes!("../../../assets/fonts/SourceCodePro-BoldIt.ttf").to_vec())
+            .with_context(|| "Failed to load SourceCodePro-BoldIt.ttf")?;
+        Ok(LoadedFonts { regular, bold, italic, bold_italic })
+    }
+
+    fn load_fira_mono() -> Result<LoadedFonts> {
+        let regular = Font::load(include_bytes!("../../../assets/fonts/FiraMono-Regular.ttf").to_vec())
+            .with_context(|| "Failed to load FiraMono-Regular.ttf")?;
+        let bold = Font::load(include_bytes!("../../../assets/fonts/FiraMono-Bold.ttf").to_vec())
+            .with_context(|| "Failed to load FiraMono-Bold.ttf")?;
+        // FiraMono doesn't have italic variants, reuse regular/bold
+        let italic = Font::load(include_bytes!("../../../assets/fonts/FiraMono-Regular.ttf").to_vec())
+            .with_context(|| "Failed to load FiraMono-Regular.ttf for italic fallback")?;
+        let bold_italic = Font::load(include_bytes!("../../../assets/fonts/FiraMono-Bold.ttf").to_vec())
+            .with_context(|| "Failed to load FiraMono-Bold.ttf for bold-italic fallback")?;
+        Ok(LoadedFonts { regular, bold, italic, bold_italic })
+    }
+
+    fn load_from_path(font_path: &str) -> Result<LoadedFonts> {
+        let base = PathBuf::from(font_path);
+
+        // Try common naming patterns for font files
+        let regular_path = Self::find_font_file(&base, &["Regular", "regular", ""])?;
+        let regular_data = std::fs::read(&regular_path)
+            .with_context(|| format!("Failed to read font file: {}", regular_path.display()))?;
+        let regular = Font::load(regular_data)
+            .with_context(|| format!("Failed to parse font file: {}", regular_path.display()))?;
+
+        // For non-regular variants, fall back to regular if not found
+        let bold = Self::try_load_variant(&base, &["Bold", "bold"], &regular_path)?;
+        let italic = Self::try_load_variant(&base, &["Italic", "It", "italic", "it"], &regular_path)?;
+        let bold_italic = Self::try_load_variant(&base, &["BoldItalic", "BoldIt", "bolditalic", "boldit"], &regular_path)?;
+
+        Ok(LoadedFonts { regular, bold, italic, bold_italic })
+    }
+
+    fn find_font_file(base: &Path, suffixes: &[&str]) -> Result<PathBuf> {
+        // If base path already has .ttf extension, use it directly
+        if base.extension().is_some_and(|e| e.eq_ignore_ascii_case("ttf")) {
+            if base.exists() {
+                return Ok(base.to_path_buf());
+            }
+            return Err(anyhow!("Font file not found: {}", base.display()));
+        }
+
+        // Try {base}-{suffix}.ttf patterns
+        for suffix in suffixes {
+            let path = if suffix.is_empty() {
+                base.with_extension("ttf")
+            } else {
+                PathBuf::from(format!("{}-{}.ttf", base.display(), suffix))
+            };
+            if path.exists() {
+                return Ok(path);
+            }
+        }
+
+        // List what we tried for the error message
+        let tried: Vec<String> = suffixes
+            .iter()
+            .map(|s| {
+                if s.is_empty() {
+                    format!("{}.ttf", base.display())
+                } else {
+                    format!("{}-{}.ttf", base.display(), s)
+                }
+            })
+            .collect();
+
+        Err(anyhow!(
+            "Could not find font file. Tried: {}. \
+            \nHint: Place font files next to src-book.toml with names like MyFont-Regular.ttf, MyFont-Bold.ttf, etc.",
+            tried.join(", ")
+        ))
+    }
+
+    fn try_load_variant(base: &Path, suffixes: &[&str], fallback_path: &Path) -> Result<Font> {
+        // Try to find the variant file
+        for suffix in suffixes {
+            let path = PathBuf::from(format!("{}-{}.ttf", base.display(), suffix));
+            if path.exists() {
+                let data = std::fs::read(&path)
+                    .with_context(|| format!("Failed to read font file: {}", path.display()))?;
+                return Font::load(data)
+                    .with_context(|| format!("Failed to parse font file: {}", path.display()));
+            }
+        }
+
+        // Fall back to regular variant
+        let data = std::fs::read(fallback_path)
+            .with_context(|| format!("Failed to read fallback font: {}", fallback_path.display()))?;
+        Font::load(data)
+            .with_context(|| format!("Failed to parse fallback font: {}", fallback_path.display()))
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
@@ -80,7 +206,7 @@ pub struct PDF {
 impl Default for PDF {
     fn default() -> Self {
         PDF {
-            font: "monospaced".to_string(),
+            font: "SourceCodePro".to_string(),
             theme: SyntaxTheme::GitHub,
             outfile: PathBuf::from("book.pdf"),
             page_width_in: 5.5,
@@ -106,15 +232,9 @@ mod test {
 
 impl PDF {
     pub fn render(&self, source: &crate::source::Source) -> Result<()> {
-        // Load fonts - using SourceCodePro which has all 4 variants
-        let regular = Font::load(include_bytes!("../../../assets/fonts/SourceCodePro-Regular.ttf").to_vec())
-            .with_context(|| "Failed to load regular font")?;
-        let bold = Font::load(include_bytes!("../../../assets/fonts/SourceCodePro-Bold.ttf").to_vec())
-            .with_context(|| "Failed to load bold font")?;
-        let italic = Font::load(include_bytes!("../../../assets/fonts/SourceCodePro-It.ttf").to_vec())
-            .with_context(|| "Failed to load italic font")?;
-        let bold_italic = Font::load(include_bytes!("../../../assets/fonts/SourceCodePro-BoldIt.ttf").to_vec())
-            .with_context(|| "Failed to load bold-italic font")?;
+        // Load fonts based on configuration
+        let fonts = LoadedFonts::load(&self.font)
+            .with_context(|| format!("Failed to load font '{}'", self.font))?;
 
         let ss: SyntaxSet = bincode::deserialize(crate::highlight::SERIALIZED_SYNTAX)
             .expect("can deserialize syntaxes");
@@ -123,10 +243,10 @@ impl PDF {
 
         let mut doc = Document::default();
         let font_ids = FontIds {
-            regular: doc.add_font(regular),
-            bold: doc.add_font(bold),
-            italic: doc.add_font(italic),
-            bold_italic: doc.add_font(bold_italic),
+            regular: doc.add_font(fonts.regular),
+            bold: doc.add_font(fonts.bold),
+            italic: doc.add_font(fonts.italic),
+            bold_italic: doc.add_font(fonts.bold_italic),
         };
 
         let mut info = Info::default();

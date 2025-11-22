@@ -87,6 +87,28 @@ margin_y = 0.5
 - `gruvbox (Light) (Hard)`
 - `GitHub`
 
+### Fonts
+
+Two monospace fonts are bundled:
+
+- `SourceCodePro` (default) - includes Regular, Bold, Italic, and BoldItalic
+- `FiraMono` - includes Regular and Bold (falls back to regular for italic styles)
+
+#### Using Custom Fonts
+
+You can use your own fonts by placing `.ttf` files next to `src-book.toml` and setting the font path:
+
+```toml
+[pdf]
+font = "./MyFont"
+```
+
+The tool will look for files matching these patterns:
+- `MyFont-Regular.ttf` (required)
+- `MyFont-Bold.ttf` (optional, falls back to Regular)
+- `MyFont-Italic.ttf` or `MyFont-It.ttf` (optional)
+- `MyFont-BoldItalic.ttf` or `MyFont-BoldIt.ttf` (optional)
+
 ## Requirements
 
 - Rust 1.70+
