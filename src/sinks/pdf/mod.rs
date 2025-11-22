@@ -201,7 +201,23 @@ pub struct PDF {
     pub margin_outer_in: f32,
     pub margin_bottom_in: f32,
     pub margin_inner_in: f32,
+    #[serde(default = "default_font_size_title")]
+    pub font_size_title_pt: f32,
+    #[serde(default = "default_font_size_heading")]
+    pub font_size_heading_pt: f32,
+    #[serde(default = "default_font_size_subheading")]
+    pub font_size_subheading_pt: f32,
+    #[serde(default = "default_font_size_body")]
+    pub font_size_body_pt: f32,
+    #[serde(default = "default_font_size_small")]
+    pub font_size_small_pt: f32,
 }
+
+fn default_font_size_title() -> f32 { 32.0 }
+fn default_font_size_heading() -> f32 { 24.0 }
+fn default_font_size_subheading() -> f32 { 12.0 }
+fn default_font_size_body() -> f32 { 10.0 }
+fn default_font_size_small() -> f32 { 8.0 }
 
 impl Default for PDF {
     fn default() -> Self {
@@ -215,6 +231,11 @@ impl Default for PDF {
             margin_outer_in: 0.125,
             margin_bottom_in: 0.25,
             margin_inner_in: 0.25,
+            font_size_title_pt: default_font_size_title(),
+            font_size_heading_pt: default_font_size_heading(),
+            font_size_subheading_pt: default_font_size_subheading(),
+            font_size_body_pt: default_font_size_body(),
+            font_size_small_pt: default_font_size_small(),
         }
     }
 }
@@ -354,13 +375,14 @@ impl PDF {
         }
 
         // add page numbers
+        let page_number_size = Pt(self.font_size_small_pt);
         for (pi, page_id) in doc.page_order.iter().skip(page_offset).enumerate() {
             let text = format!("{}", pi + 1);
             let page = doc.pages.get_mut(*page_id).expect("page exists");
             let coords: (Pt, Pt) = if pi % 2 == 0 {
                 (
                     page.content_box.x2
-                        - layout::width_of_text(&text, &doc.fonts[font_ids.regular], Pt(8.0)),
+                        - layout::width_of_text(&text, &doc.fonts[font_ids.regular], page_number_size),
                     In(0.25).into(),
                 )
             } else {
@@ -370,7 +392,7 @@ impl PDF {
                 text,
                 font: SpanFont {
                     id: font_ids.regular,
-                    size: Pt(8.0),
+                    size: page_number_size,
                 },
                 colour: Colour::new_grey(0.25),
                 coords,
@@ -387,22 +409,22 @@ impl PDF {
     }
 
     fn render_title_page(&self, doc: &mut Document, font_ids: &FontIds, source: &Source) -> Result<()> {
-        const SIZE_TITLE: Pt = Pt(32.0);
-        const SIZE_BY: Pt = Pt(8.0);
-        const SIZE_AUTHOR: Pt = Pt(10.0);
+        let size_title = Pt(self.font_size_title_pt);
+        let size_by = Pt(self.font_size_small_pt);
+        let size_author = Pt(self.font_size_body_pt);
         const SPACING: Pt = Pt(72.0 * 0.5);
 
         let page_size = PAGE_SIZE;
-        let descent_title = doc.fonts[font_ids.bold].descent(SIZE_TITLE);
+        let descent_title = doc.fonts[font_ids.bold].descent(size_title);
 
         let title = source.title.clone().unwrap_or("untitled".to_string());
         let mut authors = source.authors.clone();
         authors.sort();
         let authors: Vec<String> = authors.iter().map(ToString::to_string).collect();
 
-        let height_title = doc.fonts[font_ids.bold].line_height(SIZE_TITLE);
-        let height_by = doc.fonts[font_ids.regular].line_height(SIZE_BY);
-        let height_author = doc.fonts[font_ids.regular].line_height(SIZE_AUTHOR);
+        let height_title = doc.fonts[font_ids.bold].line_height(size_title);
+        let height_by = doc.fonts[font_ids.regular].line_height(size_by);
+        let height_author = doc.fonts[font_ids.regular].line_height(size_author);
         let height_total = height_title
             + descent_title
             + height_by
@@ -414,13 +436,13 @@ impl PDF {
         let mut y: Pt = (page_size.1 + height_total) / 2.0;
 
         let x = (page_size.0
-            - layout::width_of_text(&title, &doc.fonts[font_ids.bold], SIZE_TITLE))
+            - layout::width_of_text(&title, &doc.fonts[font_ids.bold], size_title))
             / 2.0;
         page.add_span(SpanLayout {
             text: title,
             font: SpanFont {
                 id: font_ids.bold,
-                size: SIZE_TITLE,
+                size: size_title,
             },
             colour: colours::BLACK,
             coords: (x, y),
@@ -428,13 +450,13 @@ impl PDF {
         y -= height_title + SPACING + descent_title;
 
         let x = (page_size.0
-            - layout::width_of_text("- by -", &doc.fonts[font_ids.regular], SIZE_BY))
+            - layout::width_of_text("- by -", &doc.fonts[font_ids.regular], size_by))
             / 2.0;
         page.add_span(SpanLayout {
             text: "- by -".to_string(),
             font: SpanFont {
                 id: font_ids.bold,
-                size: SIZE_BY,
+                size: size_by,
             },
             colour: colours::BLACK,
             coords: (x, y),
@@ -443,13 +465,13 @@ impl PDF {
 
         for author in authors.into_iter() {
             let x = (page_size.0
-                - layout::width_of_text(&author, &doc.fonts[font_ids.regular], SIZE_AUTHOR))
+                - layout::width_of_text(&author, &doc.fonts[font_ids.regular], size_author))
                 / 2.0;
             page.add_span(SpanLayout {
                 text: author,
                 font: SpanFont {
                     id: font_ids.bold,
-                    size: SIZE_AUTHOR,
+                    size: size_author,
                 },
                 colour: colours::BLACK,
                 coords: (x, y),
@@ -469,16 +491,17 @@ impl PDF {
         source_pages: HashMap<PathBuf, usize>,
         git_history_page: Option<usize>,
     ) -> Result<usize> {
-        const CONTENTS_SIZE: Pt = Pt(24.0);
-        const ENTRY_SIZE: Pt = Pt(10.0);
+        let contents_size = Pt(self.font_size_heading_pt);
+        let entry_size = Pt(self.font_size_body_pt);
+        let subheading_size = Pt(self.font_size_subheading_pt);
 
-        let height_contents = doc.fonts[font_ids.bold].line_height(CONTENTS_SIZE);
-        let height_entry = doc.fonts[font_ids.regular].line_height(ENTRY_SIZE);
-        let descent_entry = doc.fonts[font_ids.regular].descent(ENTRY_SIZE);
+        let height_contents = doc.fonts[font_ids.bold].line_height(contents_size);
+        let height_entry = doc.fonts[font_ids.regular].line_height(entry_size);
+        let descent_entry = doc.fonts[font_ids.regular].descent(entry_size);
 
         let entry_font = SpanFont {
             id: font_ids.regular,
-            size: ENTRY_SIZE,
+            size: entry_size,
         };
 
         // TODO: deal with when we have more than 1 toc page!
@@ -494,7 +517,7 @@ impl PDF {
             .as_face_ref()
             .underline_metrics()
             .map(|metrics| {
-                let scaling = Pt(12.0) / doc.fonts[font_ids.regular].face.as_face_ref().units_per_em() as f32;
+                let scaling = subheading_size / doc.fonts[font_ids.regular].face.as_face_ref().units_per_em() as f32;
                 (
                     scaling * metrics.position as f32,
                     scaling * metrics.thickness as f32,
@@ -516,9 +539,9 @@ impl PDF {
             let mut page = Page::new(PAGE_SIZE, Some(Margins::all(In(0.5))));
 
             let start = if pages.is_empty() {
-                layout::baseline_start(&page, &doc.fonts[font_ids.bold], CONTENTS_SIZE)
+                layout::baseline_start(&page, &doc.fonts[font_ids.bold], contents_size)
             } else {
-                layout::baseline_start(&page, &doc.fonts[font_ids.regular], ENTRY_SIZE)
+                layout::baseline_start(&page, &doc.fonts[font_ids.regular], entry_size)
             };
 
             let (x, mut y) = start;
@@ -527,7 +550,7 @@ impl PDF {
                     text: "Contents".to_string(),
                     font: SpanFont {
                         id: font_ids.bold,
-                        size: CONTENTS_SIZE,
+                        size: contents_size,
                     },
                     colour: colours::BLACK,
                     coords: (x, y),
@@ -544,11 +567,11 @@ impl PDF {
                 let entry_width = layout::width_of_text(
                     &format!("{} ", entry.0),
                     &doc.fonts[font_ids.regular],
-                    ENTRY_SIZE,
+                    entry_size,
                 );
                 let pagenum = format!("{}", entry.1 + 1); // page numbering is 0-indexed, add 1 to make it 1-indexed
                 let pagenum_width =
-                    layout::width_of_text(&pagenum, &doc.fonts[font_ids.regular], ENTRY_SIZE);
+                    layout::width_of_text(&pagenum, &doc.fonts[font_ids.regular], entry_size);
 
                 let mut underline = Content::new();
                 underline
@@ -561,7 +584,7 @@ impl PDF {
                             - *layout::width_of_text(
                                 &format!(" {}", pagenum),
                                 &doc.fonts[font_ids.regular],
-                                ENTRY_SIZE,
+                                entry_size,
                             ),
                         *y + *underline_offset,
                     )
@@ -586,7 +609,7 @@ impl PDF {
                         x1: page.content_box.x1,
                         x2: page.content_box.x2,
                         y1: y,
-                        y2: y + doc.fonts[font_ids.regular].ascent(ENTRY_SIZE),
+                        y2: y + doc.fonts[font_ids.regular].ascent(entry_size),
                     },
                     entry.1 + skip_pages + num_toc_pages,
                 );
@@ -677,6 +700,9 @@ impl PDF {
     }
 
     fn render_image(&self, doc: &mut Document, font_ids: &FontIds, path: &Path) -> Result<usize> {
+        let subheading_size = Pt(self.font_size_subheading_pt);
+        let small_size = Pt(self.font_size_small_pt);
+
         let image = Image::new_from_disk(path)?;
         let aspect_ratio = image.aspect_ratio();
         let image_id = doc.add_image(image);
@@ -700,9 +726,9 @@ impl PDF {
         } else {
             let height = page.content_box.y2
                 - page.content_box.y1
-                - doc.fonts[font_ids.regular].line_height(Pt(12.0))
+                - doc.fonts[font_ids.regular].line_height(subheading_size)
                 - In(0.25).into()
-                - (doc.fonts[font_ids.regular].line_height(Pt(8.0)) * 2.0);
+                - (doc.fonts[font_ids.regular].line_height(small_size) * 2.0);
             let width = height * aspect_ratio;
             (width, height)
         };
@@ -711,7 +737,7 @@ impl PDF {
             (page.content_box.x2 - page.content_box.x1 - image_size.0) / 2.0 + page.content_box.x1;
         let y = (page.content_box.y2 - page.content_box.y1 - image_size.1) / 2.0
             + page.content_box.y1
-            + doc.fonts[font_ids.regular].line_height(Pt(8.0));
+            + doc.fonts[font_ids.regular].line_height(small_size);
 
         page.add_image(ImageLayout {
             image_index,
@@ -722,24 +748,24 @@ impl PDF {
                 y2: y + image_size.1,
             },
         });
-        let y = y - doc.fonts[font_ids.regular].ascent(Pt(8.0));
+        let y = y - doc.fonts[font_ids.regular].ascent(small_size);
         let (file_description, image_description) =
             Self::describe_image(&doc.images[image_id], path);
         page.add_span(SpanLayout {
             text: file_description,
             font: SpanFont {
                 id: font_ids.regular,
-                size: Pt(8.0),
+                size: small_size,
             },
             colour: Colour::new_grey(0.75),
             coords: (x, y),
         });
-        let y = y - doc.fonts[font_ids.regular].line_height(Pt(8.0));
+        let y = y - doc.fonts[font_ids.regular].line_height(small_size);
         page.add_span(SpanLayout {
             text: image_description,
             font: SpanFont {
                 id: font_ids.regular,
-                size: Pt(8.0),
+                size: small_size,
             },
             colour: Colour::new_grey(0.75),
             coords: (x, y),
@@ -751,15 +777,17 @@ impl PDF {
     }
 
     fn render_header<S: ToString>(&self, doc: &Document, font_ids: &FontIds, page: &mut Page, text: S) -> Result<()> {
+        let subheading_size = Pt(self.font_size_subheading_pt);
+
         // add the current file to the top of each page
         // figure out where the header should go
         let header = text.to_string();
         let mut header_start =
-            layout::baseline_start(&page, &doc.fonts[font_ids.regular], Pt(12.0));
+            layout::baseline_start(&page, &doc.fonts[font_ids.regular], subheading_size);
         let is_even = doc.page_order.len() % 2 == 0;
         if is_even {
             header_start.0 = page.content_box.x2
-                - layout::width_of_text(&header, &doc.fonts[font_ids.regular], Pt(12.0));
+                - layout::width_of_text(&header, &doc.fonts[font_ids.regular], subheading_size);
         }
 
         // figure out the underline
@@ -768,7 +796,7 @@ impl PDF {
             .as_face_ref()
             .underline_metrics()
             .map(|metrics| {
-                let scaling = Pt(12.0) / doc.fonts[font_ids.regular].face.as_face_ref().units_per_em() as f32;
+                let scaling = subheading_size / doc.fonts[font_ids.regular].face.as_face_ref().units_per_em() as f32;
                 (
                     scaling * metrics.position as f32,
                     scaling * metrics.thickness as f32,
@@ -792,7 +820,7 @@ impl PDF {
             text: header,
             font: SpanFont {
                 id: font_ids.regular,
-                size: Pt(12.0),
+                size: subheading_size,
             },
             colour: Colour::new_grey(0.25),
             coords: header_start,
@@ -809,6 +837,10 @@ impl PDF {
         ss: &SyntaxSet,
         theme: &syntect::highlighting::Theme,
     ) -> Result<Option<usize>> {
+        let text_size = Pt(self.font_size_body_pt);
+        let small_size = Pt(self.font_size_small_pt);
+        let subheading_size = Pt(self.font_size_subheading_pt);
+
         // read the contents, or use placeholder for binary files
         let (contents, is_binary) = match std::fs::read_to_string(path) {
             Ok(contents) => (contents.replace("    ", "  "), false),
@@ -834,8 +866,6 @@ impl PDF {
             )
         };
 
-        const TEXT_SIZE: Pt = Pt(10.0);
-
         // start the set of pages with the path
         let mut text: Vec<(String, Colour, SpanFont)> = Vec::default();
 
@@ -846,7 +876,7 @@ impl PDF {
                 Colour::new_grey(0.5),
                 SpanFont {
                     id: font_ids.italic,
-                    size: TEXT_SIZE,
+                    size: text_size,
                 },
             ));
         } else if let Some(syntax) = syntax {
@@ -865,7 +895,7 @@ impl PDF {
                     Colour::new_grey(0.75),
                     SpanFont {
                         id: font_ids.regular,
-                        size: Pt(8.0),
+                        size: small_size,
                     },
                 ));
                 for (style, s) in ranges.into_iter() {
@@ -890,7 +920,7 @@ impl PDF {
                         colour,
                         SpanFont {
                             id: font_id,
-                            size: TEXT_SIZE,
+                            size: text_size,
                         },
                     ));
                 }
@@ -904,7 +934,7 @@ impl PDF {
                     colours::BLACK,
                     SpanFont {
                         id: font_ids.regular,
-                        size: TEXT_SIZE,
+                        size: text_size,
                     },
                 ));
             }
@@ -912,7 +942,7 @@ impl PDF {
 
         // and render it into pages
         let wrap_width = if syntax.is_some() {
-            layout::width_of_text("      ", &doc.fonts[font_ids.regular], Pt(8.0))
+            layout::width_of_text("      ", &doc.fonts[font_ids.regular], small_size)
         } else {
             Pt(0.0)
         };
@@ -928,12 +958,12 @@ impl PDF {
             let page_size = PAGE_SIZE;
 
             let mut page = Page::new(page_size, Some(margins));
-            let start = layout::baseline_start(&page, &doc.fonts[font_ids.regular], TEXT_SIZE);
+            let start = layout::baseline_start(&page, &doc.fonts[font_ids.regular], text_size);
             let start = (
                 start.0,
                 start.1
-                    - (doc.fonts[font_ids.regular].ascent(Pt(10.0))
-                        - doc.fonts[font_ids.regular].descent(Pt(12.0)))
+                    - (doc.fonts[font_ids.regular].ascent(text_size)
+                        - doc.fonts[font_ids.regular].descent(subheading_size))
                     - In(0.125).into(),
             );
             let bbox = page.content_box.clone();
@@ -962,16 +992,19 @@ impl PDF {
     }
 
     fn render_commits(&self, doc: &mut Document, font_ids: &FontIds, commits: Vec<Commit>) -> Result<Option<usize>> {
+        let small_size = Pt(self.font_size_small_pt);
+        let subheading_size = Pt(self.font_size_subheading_pt);
+
         // convert the commits to a series of text spans
         let mut text: Vec<(String, Colour, SpanFont)> = Vec::with_capacity(commits.len() * 6);
 
         let span_font_normal = SpanFont {
             id: font_ids.regular,
-            size: Pt(8.0),
+            size: small_size,
         };
         let span_font_bold = SpanFont {
             id: font_ids.bold,
-            size: Pt(8.0),
+            size: small_size,
         };
 
         for commit in commits.into_iter() {
@@ -1047,7 +1080,7 @@ impl PDF {
                 start.0,
                 start.1
                     - (doc.fonts[font_ids.bold].ascent(span_font_bold.size)
-                        - doc.fonts[font_ids.regular].descent(Pt(12.0)))
+                        - doc.fonts[font_ids.regular].descent(subheading_size))
                     - In(0.125).into(),
             );
             let bbox = page.content_box.clone();

@@ -232,9 +232,26 @@ fn try_main() -> Result<()> {
                     .interact()?;
                 let syntax_theme = SyntaxTheme::all()[syntax_theme];
 
+                let base_font_size: f32 = Input::with_theme(&theme)
+                    .with_prompt("Base font size in points")
+                    .default(10.0)
+                    .interact()?;
+
+                // Calculate derived font sizes from base, rounded to integers
+                let font_size_title_pt = (base_font_size * 3.2).round();
+                let font_size_heading_pt = (base_font_size * 2.4).round();
+                let font_size_subheading_pt = (base_font_size * 1.2).round();
+                let font_size_body_pt = base_font_size.round();
+                let font_size_small_pt = (base_font_size * 0.8).round();
+
                 pdf = Some(PDF {
                     outfile,
                     theme: syntax_theme,
+                    font_size_title_pt,
+                    font_size_heading_pt,
+                    font_size_subheading_pt,
+                    font_size_body_pt,
+                    font_size_small_pt,
                     ..PDF::default()
                 });
             }
