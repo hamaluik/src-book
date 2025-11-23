@@ -97,10 +97,9 @@ pub fn render(
 
         // highlight the file, converting into spans
         for (i, line) in LinesWithEndings::from(contents.as_str()).enumerate() {
-            let ranges: Vec<(syntect::highlighting::Style, &str)> =
-                h.highlight_line(line, &ss).with_context(|| {
-                    format!("Failed to highlight source code for line `{}`", line)
-                })?;
+            let ranges: Vec<(syntect::highlighting::Style, &str)> = h
+                .highlight_line(line, ss)
+                .with_context(|| format!("Failed to highlight source code for line `{}`", line))?;
 
             text.push((
                 format!("{:>4}  ", i + 1),
@@ -178,7 +177,7 @@ pub fn render(
                     - doc.fonts[font_ids.regular].descent(subheading_size))
                 - In(0.125).into(),
         );
-        let bbox = page.content_box.clone();
+        let bbox = page.content_box;
 
         // don't start a page with empty lines
         while let Some(span) = text.first() {
@@ -193,7 +192,7 @@ pub fn render(
         }
 
         header::render_header(config, doc, font_ids, &mut page, path.display())?;
-        layout::layout_text_natural(&doc, &mut page, start, &mut text, wrap_width, bbox);
+        layout::layout_text_natural(doc, &mut page, start, &mut text, wrap_width, bbox);
         let page_id = doc.add_page(page);
         if first_page.is_none() {
             first_page = Some(doc.index_of_page(page_id).expect("page was just added"));

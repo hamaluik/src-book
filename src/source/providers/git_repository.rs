@@ -1,3 +1,9 @@
+//! Git repository file discovery and author extraction.
+//!
+//! Walks a git repository to collect source files (respecting `.gitignore`) and extracts
+//! author information from commit history. Authors are ranked by commit count to determine
+//! prominence ordering on the title page.
+
 use crate::source::{Author, AuthorBuilder};
 use anyhow::{anyhow, Context, Result};
 use globset::GlobMatcher;
@@ -5,6 +11,7 @@ use ignore::Walk;
 use std::collections::HashMap;
 use std::path::PathBuf;
 
+/// A loaded git repository with extracted files and authors.
 #[derive(Debug)]
 pub struct GitRepository {
     pub _root: PathBuf,
@@ -59,7 +66,7 @@ impl GitRepository {
             walk.push(head_oid)
                 .with_context(|| "Failed to push head OID to revwalk")?;
 
-            for oid in walk.into_iter() {
+            for oid in walk {
                 let oid = oid.with_context(|| "Failed to get OID while walking repository")?;
                 let commit = repo
                     .find_commit(oid)

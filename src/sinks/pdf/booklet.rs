@@ -1,3 +1,16 @@
+//! Booklet PDF generation for saddle-stitch binding.
+//!
+//! Converts the digital PDF into a print-ready booklet by:
+//! 1. Converting each page into a Form XObject for reuse
+//! 2. Calculating imposition layout (which pages go where on physical sheets)
+//! 3. Placing two logical pages side-by-side on each sheet side
+//!
+//! The output is designed for duplex printing: print the PDF, fold the stack
+//! in half, and staple along the spine.
+//!
+//! **Limitation**: Images are not currently supported in booklet output due to
+//! the way Form XObjects work. Only text content is rendered.
+
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::{FontIds, LoadedFonts};
 use crate::sinks::pdf::imposition::{calculate_imposition, create_imposed_page, BookletConfig};
@@ -119,8 +132,12 @@ pub fn render_booklet(
     }
 
     // write the booklet PDF
-    let file = std::fs::File::create(output_path)
-        .with_context(|| format!("Failed to create booklet output file: {}", output_path.display()))?;
+    let file = std::fs::File::create(output_path).with_context(|| {
+        format!(
+            "Failed to create booklet output file: {}",
+            output_path.display()
+        )
+    })?;
     let mut file = std::io::BufWriter::new(file);
     booklet_doc
         .write(&mut file)

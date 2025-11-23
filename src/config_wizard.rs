@@ -51,9 +51,9 @@ pub fn run() -> Result<()> {
         licenses: detected_licenses,
     } = detect_defaults(&repo_path);
 
-    let title = Input::with_theme(&theme)
+    let title: String = Input::with_theme(&theme)
         .with_prompt("Book title")
-        .with_initial_text(detected_title.unwrap_or_default())
+        .default(detected_title.unwrap_or_default())
         .allow_empty(false)
         .interact()
         .with_context(|| "Failed to obtain title")?;

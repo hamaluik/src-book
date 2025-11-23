@@ -77,7 +77,8 @@ pub fn render(
     }
 
     // and render it into pages
-    let wrap_width = layout::width_of_text("         ", &doc.fonts[font_ids.bold], span_font_bold.size);
+    let wrap_width =
+        layout::width_of_text("         ", &doc.fonts[font_ids.bold], span_font_bold.size);
     let mut first_page = None;
     while !text.is_empty() {
         let margins = Margins::trbl(
@@ -103,7 +104,7 @@ pub fn render(
                     - doc.fonts[font_ids.regular].descent(subheading_size))
                 - In(0.125).into(),
         );
-        let bbox = page.content_box.clone();
+        let bbox = page.content_box;
 
         // don't start a page with empty lines
         while let Some(span) = text.first() {
@@ -118,7 +119,7 @@ pub fn render(
         }
 
         header::render_header(config, doc, font_ids, &mut page, "Commit History")?;
-        layout::layout_text_natural(&doc, &mut page, start, &mut text, wrap_width, bbox);
+        layout::layout_text_natural(doc, &mut page, start, &mut text, wrap_width, bbox);
         let page_id = doc.add_page(page);
         if first_page.is_none() {
             first_page = Some(doc.index_of_page(page_id).expect("page was just added"));

@@ -56,8 +56,8 @@ fn main() -> Result<()> {
         ),
     )?;
 
-    let themes =
-        bincode::serialize(&themes).with_context(|| "Failed to serialize themeset to bincode")?;
+    let themes = bincode::serde::encode_to_vec(&themes, bincode::config::standard())
+        .with_context(|| "Failed to serialize themeset to bincode")?;
     std::fs::write(themebin_path, themes)
         .with_context(|| "Failed to write serialized themese to bincode")?;
 

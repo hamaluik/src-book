@@ -96,8 +96,11 @@ fn describe_image(image: &Image, path: &Path) -> (String, String) {
 
     if let Ok(metadata) = std::fs::metadata(path) {
         let file_size = metadata.len();
-        let file_size = byte_unit::Byte::from_bytes(file_size as u128);
-        let file_size = file_size.get_appropriate_unit(false).format(2);
+        let file_size = byte_unit::Byte::from_u128(file_size as u128)
+            .expect("can create byte unit from file size");
+        let file_size = file_size
+            .get_appropriate_unit(byte_unit::UnitType::Binary)
+            .to_string();
         file_description.push_str(", ");
         file_description.push_str(&file_size);
 

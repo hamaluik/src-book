@@ -25,7 +25,7 @@ pub fn render_header<S: ToString>(
     // figure out where the header should go
     let header = text.to_string();
     let mut header_start =
-        layout::baseline_start(&page, &doc.fonts[font_ids.regular], subheading_size);
+        layout::baseline_start(page, &doc.fonts[font_ids.regular], subheading_size);
     let is_even = doc.page_order.len() % 2 == 0;
     if is_even {
         header_start.0 = page.content_box.x2
@@ -39,7 +39,10 @@ pub fn render_header<S: ToString>(
         .underline_metrics()
         .map(|metrics| {
             let scaling = subheading_size
-                / doc.fonts[font_ids.regular].face.as_face_ref().units_per_em() as f32;
+                / doc.fonts[font_ids.regular]
+                    .face
+                    .as_face_ref()
+                    .units_per_em() as f32;
             (
                 scaling * metrics.position as f32,
                 scaling * metrics.thickness as f32,

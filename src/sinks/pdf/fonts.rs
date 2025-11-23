@@ -68,9 +68,8 @@ impl LoadedFonts {
         let regular =
             Font::load(include_bytes!("../../../assets/fonts/FiraMono-Regular.ttf").to_vec())
                 .with_context(|| "Failed to load FiraMono-Regular.ttf")?;
-        let bold =
-            Font::load(include_bytes!("../../../assets/fonts/FiraMono-Bold.ttf").to_vec())
-                .with_context(|| "Failed to load FiraMono-Bold.ttf")?;
+        let bold = Font::load(include_bytes!("../../../assets/fonts/FiraMono-Bold.ttf").to_vec())
+            .with_context(|| "Failed to load FiraMono-Bold.ttf")?;
         // FiraMono doesn't have italic variants, reuse regular/bold
         let italic =
             Font::load(include_bytes!("../../../assets/fonts/FiraMono-Regular.ttf").to_vec())
@@ -170,8 +169,9 @@ impl LoadedFonts {
         }
 
         // fall back to regular variant
-        let data = std::fs::read(fallback_path)
-            .with_context(|| format!("Failed to read fallback font: {}", fallback_path.display()))?;
+        let data = std::fs::read(fallback_path).with_context(|| {
+            format!("Failed to read fallback font: {}", fallback_path.display())
+        })?;
         Font::load(data)
             .with_context(|| format!("Failed to parse fallback font: {}", fallback_path.display()))
     }

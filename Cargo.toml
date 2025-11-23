@@ -9,27 +9,27 @@ license = "Apache-2.0"
 build = "build.rs"
 
 [dependencies]
-git2 = "0.14"
+git2 = "0.20"
 ignore = "0.4"
-derive_builder = "0.11"
-syntect = "5.0"
-dialoguer = { version = "0.10", features = ["fuzzy-select"] }
-console = "0.15"
+derive_builder = "0.20"
+syntect = "5.3"
+dialoguer = { version = "0.12", features = ["fuzzy-select"] }
+console = "0.16"
 anyhow = "1.0"
 log = "0.4"
-clap = { version = "3.2", features = ["derive", "cargo", "env", "unicode", "wrap_help"] }
+clap = { version = "4", features = ["derive", "cargo", "env", "unicode", "wrap_help"] }
 globset = "0.4"
 pdf-gen = { path = "../pdf-gen" }
-owned_ttf_parser = "0.15"
-toml = "0.5"
+owned_ttf_parser = "0.25"
+toml = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-byte-unit = "4"
+byte-unit = "5"
 chrono = "0.4"
-bincode = "1"
+bincode = { version = "2", features = ["serde"] }
 
 [build-dependencies]
-syntect = "5.0"
+syntect = "5.3"
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
-bincode = "1"
+bincode = { version = "2", features = ["serde"] }

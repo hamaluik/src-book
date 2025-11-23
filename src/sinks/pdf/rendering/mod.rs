@@ -36,10 +36,16 @@ impl PDF {
         let fonts = LoadedFonts::load(&self.font)
             .with_context(|| format!("Failed to load font '{}'", self.font))?;
 
-        let ss: SyntaxSet = bincode::deserialize(crate::highlight::SERIALIZED_SYNTAX)
-            .expect("can deserialize syntaxes");
-        let ts: ThemeSet = bincode::deserialize(crate::highlight::SERIALIZED_THEMES)
-            .expect("can deserialize themes");
+        let (ss, _): (SyntaxSet, _) = bincode::serde::decode_from_slice(
+            crate::highlight::SERIALIZED_SYNTAX,
+            bincode::config::standard(),
+        )
+        .expect("can deserialize syntaxes");
+        let (ts, _): (ThemeSet, _) = bincode::serde::decode_from_slice(
+            crate::highlight::SERIALIZED_THEMES,
+            bincode::config::standard(),
+        )
+        .expect("can deserialize themes");
 
         let mut doc = Document::default();
         let font_ids = FontIds {
@@ -63,7 +69,7 @@ impl PDF {
             info.author(authors);
         }
 
-        title_page::render(&self, &mut doc, &font_ids, source)
+        title_page::render(self, &mut doc, &font_ids, source)
             .with_context(|| "Failed to render title page")?;
         // add a blank page after the title page so we start on the right
         doc.add_page(Page::new(PAGE_SIZE, None));
@@ -79,8 +85,7 @@ impl PDF {
 
         // render frontmatter files first if present
         if !source.frontmatter_files.is_empty() {
-            let frontmatter_bookmark =
-                doc.add_bookmark(None, "Frontmatter", doc.page_order.len());
+            let frontmatter_bookmark = doc.add_bookmark(None, "Frontmatter", doc.page_order.len());
             frontmatter_bookmark.borrow_mut().bolded();
 
             for file in source.frontmatter_files.iter() {
@@ -95,7 +100,7 @@ impl PDF {
                 {
                     "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
                     | "tiff" => {
-                        let page_index = images::render(&self, &mut doc, &font_ids, file)?;
+                        let page_index = images::render(self, &mut doc, &font_ids, file)?;
                         let file_name = file
                             .file_name()
                             .map(|n| n.to_string_lossy().to_string())
@@ -104,7 +109,7 @@ impl PDF {
                     }
                     _ => {
                         if let Some(page_index) = source_file::render(
-                            &self,
+                            self,
                             &mut doc,
                             &font_ids,
                             file,
@@ -150,7 +155,7 @@ impl PDF {
             {
                 "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
                 | "tiff" => {
-                    let page_index = images::render(&self, &mut doc, &font_ids, file)?;
+                    let page_index = images::render(self, &mut doc, &font_ids, file)?;
                     let parent_bookmark = get_or_create_folder_bookmark(
                         &mut doc,
                         &mut folder_bookmarks,
@@ -166,16 +171,15 @@ impl PDF {
                 }
                 _ => {
                     if let Some(page_index) = source_file::render(
-                        &self,
+                        self,
                         &mut doc,
                         &font_ids,
                         file,
                         &ss,
                         &ts.themes[self.theme.name()],
                     )
-                    .with_context(|| {
-                        format!("Failed to render source file {}!", file.display())
-                    })? {
+                    .with_context(|| format!("Failed to render source file {}!", file.display()))?
+                    {
                         let parent_bookmark = get_or_create_folder_bookmark(
                             &mut doc,
                             &mut folder_bookmarks,
@@ -196,14 +200,14 @@ impl PDF {
         let commit_list = source
             .commits()
             .with_context(|| "Failed to get commits for repository")?;
-        let commit_page_index = commits::render(&self, &mut doc, &font_ids, commit_list)
+        let commit_page_index = commits::render(self, &mut doc, &font_ids, commit_list)
             .with_context(|| "Failed to render commit history")?;
         if let Some(commit_page) = commit_page_index {
             doc.add_bookmark(None, "Commit History", commit_page);
         }
 
         let num_toc_pages = table_of_contents::render(
-            &self,
+            self,
             &mut doc,
             &font_ids,
             page_offset,
@@ -230,7 +234,11 @@ impl PDF {
             let coords: (Pt, Pt) = if pi % 2 == 0 {
                 (
                     page.content_box.x2
-                        - layout::width_of_text(&text, &doc.fonts[font_ids.regular], page_number_size),
+                        - layout::width_of_text(
+                            &text,
+                            &doc.fonts[font_ids.regular],
+                            page_number_size,
+                        ),
                     In(0.25).into(),
                 )
             } else {
@@ -251,7 +259,7 @@ impl PDF {
 
         // generate booklet PDF if configured
         let booklet_sheets = if let Some(booklet_path) = &self.booklet_outfile {
-            let sheets = render_booklet(&self, &doc, &font_ids, booklet_path)
+            let sheets = render_booklet(self, &doc, &font_ids, booklet_path)
                 .with_context(|| "Failed to render booklet PDF")?;
             Some(sheets)
         } else {
@@ -324,10 +332,7 @@ fn get_or_create_folder_bookmark(
         .unwrap_or_else(|| root_bookmark.clone())
 }
 
-fn offset_bookmark_page_indices(
-    items: &mut [Rc<RefCell<OutlineEntry>>],
-    offset_amount: usize,
-) {
+fn offset_bookmark_page_indices(items: &mut [Rc<RefCell<OutlineEntry>>], offset_amount: usize) {
     for item in items {
         let has_children = !item.borrow().children.is_empty();
         if has_children {

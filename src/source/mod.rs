@@ -12,8 +12,8 @@ pub use author::*;
 pub use commit::*;
 
 mod providers;
-pub use providers::*;
 use anyhow::{anyhow, Context, Result};
+pub use providers::*;
 use serde::{Deserialize, Serialize};
 
 /// Source metadata and file list for rendering a codebase as a book.
@@ -92,7 +92,7 @@ impl Source {
 
         let mut commits: Vec<Commit> = Vec::default();
 
-        for oid in walk.into_iter() {
+        for oid in walk {
             let oid = oid.with_context(|| "Failed to get OID while walking repository")?;
             let commit = repo
                 .find_commit(oid)

@@ -185,7 +185,10 @@ pub fn render(
         .underline_metrics()
         .map(|metrics| {
             let scaling = subheading_size
-                / doc.fonts[font_ids.regular].face.as_face_ref().units_per_em() as f32;
+                / doc.fonts[font_ids.regular]
+                    .face
+                    .as_face_ref()
+                    .units_per_em() as f32;
             (
                 scaling * metrics.position as f32,
                 scaling * metrics.thickness as f32,

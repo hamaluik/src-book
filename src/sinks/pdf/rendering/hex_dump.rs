@@ -76,12 +76,15 @@ fn category_colour(category: ByteCategory, theme: &syntect::highlighting::Theme)
         ByteCategory::NonAscii => &["constant"],
     };
 
-    let default_fg = theme.settings.foreground.unwrap_or(syntect::highlighting::Color {
-        r: 0,
-        g: 0,
-        b: 0,
-        a: 255,
-    });
+    let default_fg = theme
+        .settings
+        .foreground
+        .unwrap_or(syntect::highlighting::Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        });
 
     // try each scope prefix until we find a match in the theme
     for prefix in scope_prefixes {
@@ -192,7 +195,7 @@ pub fn render(
                     - doc.fonts[font_ids.regular].descent(subheading_size))
                 - In(0.125).into(),
         );
-        let bbox = page.content_box.clone();
+        let bbox = page.content_box;
 
         // skip leading newlines
         while let Some(span) = text.first() {
@@ -240,9 +243,18 @@ mod tests {
 
     #[test]
     fn categorises_whitespace() {
-        assert_eq!(ByteCategory::from_byte(b'\t'), ByteCategory::AsciiWhitespace);
-        assert_eq!(ByteCategory::from_byte(b'\n'), ByteCategory::AsciiWhitespace);
-        assert_eq!(ByteCategory::from_byte(b'\r'), ByteCategory::AsciiWhitespace);
+        assert_eq!(
+            ByteCategory::from_byte(b'\t'),
+            ByteCategory::AsciiWhitespace
+        );
+        assert_eq!(
+            ByteCategory::from_byte(b'\n'),
+            ByteCategory::AsciiWhitespace
+        );
+        assert_eq!(
+            ByteCategory::from_byte(b'\r'),
+            ByteCategory::AsciiWhitespace
+        );
         assert_eq!(ByteCategory::from_byte(b' '), ByteCategory::AsciiWhitespace);
     }
 

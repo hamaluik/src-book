@@ -49,7 +49,14 @@ pub fn detect_frontmatter(files: &[PathBuf]) -> Vec<PathBuf> {
         &["go.mod"],
         &["Makefile"],
         // licence files - last because they're standard boilerplate
-        &["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md", "COPYING"],
+        &[
+            "LICENSE",
+            "LICENSE.md",
+            "LICENSE.txt",
+            "LICENCE",
+            "LICENCE.md",
+            "COPYING",
+        ],
     ];
 
     let mut frontmatter = Vec::new();
@@ -172,11 +179,7 @@ fn detect_license_from_cargo_toml(repo_path: &Path) -> Option<String> {
 
     // parse as TOML and extract license field
     let parsed: toml::Value = toml::from_str(&contents).ok()?;
-    let license = parsed
-        .get("package")?
-        .get("license")?
-        .as_str()?
-        .to_string();
+    let license = parsed.get("package")?.get("license")?.as_str()?.to_string();
 
     if license.is_empty() {
         None
@@ -201,7 +204,13 @@ fn detect_license_from_package_json(repo_path: &Path) -> Option<String> {
 }
 
 fn detect_license_from_license_file(repo_path: &Path) -> Option<String> {
-    let license_files = ["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.md"];
+    let license_files = [
+        "LICENSE",
+        "LICENSE.md",
+        "LICENSE.txt",
+        "LICENCE",
+        "LICENCE.md",
+    ];
 
     for filename in license_files {
         let path = repo_path.join(filename);
@@ -222,7 +231,9 @@ fn match_license_text(contents: &str) -> Option<String> {
     // check for common license patterns
     // ordered roughly by popularity
 
-    if contents_lower.contains("mit license") || contents_lower.contains("permission is hereby granted, free of charge") {
+    if contents_lower.contains("mit license")
+        || contents_lower.contains("permission is hereby granted, free of charge")
+    {
         return Some("MIT".to_string());
     }
 
@@ -257,7 +268,10 @@ fn match_license_text(contents: &str) -> Option<String> {
         return Some("BSD-3-Clause".to_string());
     }
 
-    if contents_lower.contains("bsd 2-clause") || contents_lower.contains("2-clause bsd") || contents_lower.contains("simplified bsd") {
+    if contents_lower.contains("bsd 2-clause")
+        || contents_lower.contains("2-clause bsd")
+        || contents_lower.contains("simplified bsd")
+    {
         return Some("BSD-2-Clause".to_string());
     }
 
@@ -268,7 +282,9 @@ fn match_license_text(contents: &str) -> Option<String> {
         return Some("MPL-2.0".to_string());
     }
 
-    if contents_lower.contains("the unlicense") || contents_lower.contains("this is free and unencumbered software") {
+    if contents_lower.contains("the unlicense")
+        || contents_lower.contains("this is free and unencumbered software")
+    {
         return Some("Unlicense".to_string());
     }
 
@@ -280,10 +296,10 @@ fn match_license_text(contents: &str) -> Option<String> {
         return Some("BSL-1.0".to_string());
     }
 
-    if contents_lower.contains("creative commons") {
-        if contents_lower.contains("cc0") || contents_lower.contains("public domain") {
-            return Some("CC0-1.0".to_string());
-        }
+    if contents_lower.contains("creative commons")
+        && (contents_lower.contains("cc0") || contents_lower.contains("public domain"))
+    {
+        return Some("CC0-1.0".to_string());
     }
 
     if contents_lower.contains("do what the fuck you want") || contents_lower.contains("wtfpl") {
@@ -317,7 +333,10 @@ mod tests {
     #[test]
     fn can_match_apache_license() {
         let apache_text = "Apache License\nVersion 2.0, January 2004";
-        assert_eq!(match_license_text(apache_text), Some("Apache-2.0".to_string()));
+        assert_eq!(
+            match_license_text(apache_text),
+            Some("Apache-2.0".to_string())
+        );
     }
 
     #[test]

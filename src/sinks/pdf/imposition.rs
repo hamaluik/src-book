@@ -60,7 +60,10 @@ pub struct PrintSheet {
 /// - Sheet 2 Back:  pages 4, 13 (left, right)
 /// - etc.
 pub fn calculate_signature_sheets(signature_size: u32) -> Vec<PrintSheet> {
-    assert!(signature_size % 4 == 0, "signature size must be divisible by 4");
+    assert!(
+        signature_size % 4 == 0,
+        "signature size must be divisible by 4"
+    );
     assert!(signature_size > 0, "signature size must be positive");
 
     let num_sheets = signature_size / 2;
@@ -101,7 +104,7 @@ pub fn calculate_imposition(total_pages: usize, signature_size: u32) -> Vec<Prin
     let sig_size = signature_size as usize;
 
     // round up to the nearest signature
-    let num_signatures = (total_pages + sig_size - 1) / sig_size;
+    let num_signatures = total_pages.div_ceil(sig_size);
     let _padded_total = num_signatures * sig_size;
 
     let mut all_sheets = Vec::new();
@@ -149,10 +152,7 @@ pub fn create_imposed_page(
     left_xobj: Option<Id<FormXObject>>,
     right_xobj: Option<Id<FormXObject>>,
 ) -> Page {
-    let mut page = Page::new(
-        (config.sheet_width, config.sheet_height),
-        None,
-    );
+    let mut page = Page::new((config.sheet_width, config.sheet_height), None);
 
     // calculate scaling to fit pages side by side
     // each page gets half the sheet width
@@ -169,22 +169,15 @@ pub fn create_imposed_page(
 
     // place left page
     if let Some(xobj_id) = left_xobj {
-        let transform = Transform::translate(Pt(0.0), Pt(y_offset))
-            .with_scale(scale, scale);
-        page.add_form_xobject(FormXObjectLayout {
-            xobj_id,
-            transform,
-        });
+        let transform = Transform::translate(Pt(0.0), Pt(y_offset)).with_scale(scale, scale);
+        page.add_form_xobject(FormXObjectLayout { xobj_id, transform });
     }
 
     // place right page
     if let Some(xobj_id) = right_xobj {
-        let transform = Transform::translate(Pt(*available_width), Pt(y_offset))
-            .with_scale(scale, scale);
-        page.add_form_xobject(FormXObjectLayout {
-            xobj_id,
-            transform,
-        });
+        let transform =
+            Transform::translate(Pt(*available_width), Pt(y_offset)).with_scale(scale, scale);
+        page.add_form_xobject(FormXObjectLayout { xobj_id, transform });
     }
 
     page

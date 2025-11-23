@@ -37,8 +37,8 @@ pub fn render(config: &PDF, doc: &mut Document, font_ids: &FontIds, source: &Sou
 
     let mut y: Pt = (page_size.1 + height_total) / 2.0;
 
-    let x = (page_size.0 - layout::width_of_text(&title, &doc.fonts[font_ids.bold], size_title))
-        / 2.0;
+    let x =
+        (page_size.0 - layout::width_of_text(&title, &doc.fonts[font_ids.bold], size_title)) / 2.0;
     page.add_span(SpanLayout {
         text: title,
         font: SpanFont {

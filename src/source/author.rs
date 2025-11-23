@@ -119,20 +119,20 @@ impl PartialEq for Author {
 
 impl PartialOrd for Author {
     fn partial_cmp(&self, other: &Author) -> Option<Ordering> {
-        match self.prominence.partial_cmp(&other.prominence) {
-            Some(Ordering::Equal) => match (self.role.is_some(), other.role.is_some()) {
-                (true, false) => Some(Ordering::Greater),
-                (false, true) => Some(Ordering::Less),
-                _ => self.to_string().partial_cmp(&other.to_string()),
-            },
-            ordering => ordering,
-        }
+        Some(self.cmp(other))
     }
 }
 
 impl Ord for Author {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or_else(|| Ordering::Equal)
+        match self.prominence.cmp(&other.prominence) {
+            Ordering::Equal => match (self.role.is_some(), other.role.is_some()) {
+                (true, false) => Ordering::Greater,
+                (false, true) => Ordering::Less,
+                _ => self.to_string().cmp(&other.to_string()),
+            },
+            ordering => ordering,
+        }
     }
 }
 
