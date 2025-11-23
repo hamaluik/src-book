@@ -772,6 +772,45 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             String::new()
         };
 
+        // PDF document metadata (subject and keywords) for the document info dictionary.
+        // these appear in PDF viewers under "Properties" and can help with organisation.
+        // in non-interactive mode, use template settings if available; otherwise omit.
+        let (subject, keywords) = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .map(|p| (p.subject.clone(), p.keywords.clone()))
+                .unwrap_or((None, None))
+        } else if Confirm::with_theme(&theme)
+            .with_prompt("Add PDF metadata (subject/keywords for document properties)?")
+            .default(false)
+            .interact()?
+        {
+            let subject_input: String = Input::with_theme(&theme)
+                .with_prompt("Document subject/description (empty to skip)")
+                .allow_empty(true)
+                .interact()?;
+            let subject = if subject_input.trim().is_empty() {
+                None
+            } else {
+                Some(subject_input)
+            };
+
+            let keywords_input: String = Input::with_theme(&theme)
+                .with_prompt("Keywords (comma-separated, empty to skip)")
+                .allow_empty(true)
+                .interact()?;
+            let keywords = if keywords_input.trim().is_empty() {
+                None
+            } else {
+                Some(keywords_input)
+            };
+
+            (subject, keywords)
+        } else {
+            (None, None)
+        };
+
         pdf = Some(PDF {
             outfile,
             theme: syntax_theme,
@@ -796,6 +835,8 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             footer_position,
             footer_rule,
             colophon_template,
+            subject,
+            keywords,
             ..PDF::default()
         });
     }

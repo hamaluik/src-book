@@ -1,0 +1,125 @@
+[source]
+title = "Src Book"
+repository = "."
+block_globs = ["Cargo.lock"]
+exclude_submodules = true
+entrypoint = "src/main.rs"
+commit_order = "OldestFirst"
+licenses = ["Apache-2.0"]
+frontmatter_files = [
+    "README.md",
+    "Cargo.toml",
+    "LICENSE",
+]
+source_files = [
+    "src/main.rs",
+    "src/cli.rs",
+    "src/config_wizard.rs",
+    "src/detection.rs",
+    "src/file_ordering.rs",
+    "src/highlight.rs",
+    "src/update.rs",
+    "src/source/author.rs",
+    "src/source/commit.rs",
+    "src/source/mod.rs",
+    "src/sinks/pdf/booklet.rs",
+    "src/sinks/pdf/config.rs",
+    "src/sinks/pdf/fonts.rs",
+    "src/sinks/pdf/imposition.rs",
+    "src/sinks/pdf/mod.rs",
+    "src/source/providers/git_repository.rs",
+    "src/source/providers/mod.rs",
+    "src/sinks/pdf/rendering/colophon.rs",
+    "src/sinks/pdf/rendering/commits.rs",
+    "src/sinks/pdf/rendering/header_footer.rs",
+    "src/sinks/pdf/rendering/hex_dump.rs",
+    "src/sinks/pdf/rendering/images.rs",
+    "src/sinks/pdf/rendering/mod.rs",
+    "src/sinks/pdf/rendering/source_file.rs",
+    "src/sinks/pdf/rendering/table_of_contents.rs",
+    "src/sinks/pdf/rendering/title_page.rs",
+    "build.rs",
+    "assets/fonts/FiraMono-Bold.ttf",
+    "assets/fonts/FiraMono-Regular.ttf",
+    "assets/fonts/SourceCodePro-Bold.ttf",
+    "assets/fonts/SourceCodePro-BoldIt.ttf",
+    "assets/fonts/SourceCodePro-It.ttf",
+    "assets/fonts/SourceCodePro-Regular.ttf",
+]
+
+[[source.authors]]
+user_names = []
+name = "Kenton Hamaluik"
+email = "kenton@hamaluik.ca"
+prominence = 38
+
+[pdf]
+font = "SourceCodePro"
+theme = "Solarized (light)"
+outfile = "src-book.pdf"
+page_width_in = 5.5
+page_height_in = 8.5
+margin_top_in = 0.5
+margin_outer_in = 0.125
+margin_bottom_in = 0.25
+margin_inner_in = 0.25
+font_size_title_pt = 26.0
+font_size_heading_pt = 19.0
+font_size_subheading_pt = 10.0
+font_size_body_pt = 8.0
+font_size_small_pt = 6.0
+booklet_outfile = "src-book-booklet.pdf"
+booklet_signature_size = 16
+booklet_sheet_width_in = 11.0
+booklet_sheet_height_in = 8.5
+render_binary_hex = false
+binary_hex_max_bytes = 65536
+font_size_hex_pt = 5.0
+header_template = "{file}"
+header_position = "Outer"
+header_rule = "Below"
+footer_template = "{n}"
+footer_position = "Outer"
+footer_rule = "None"
+colophon_template = """
+{title}
+
+by {authors}
+
+{remotes}
+
+─────────────────────────────
+
+Generated on {generated_date}
+by src-book v{tool_version}
+
+{licences}
+
+─────────────────────────────
+
+Statistics
+
+  {file_count} source files
+  {line_count} lines of code
+  {total_bytes}
+  {commit_count} commits ({date_range})
+
+{language_stats}
+
+Commit Activity
+
+{commit_chart}"""
+subject = "Source code for a project to generate printed copies of your source code repositories to store them forever"
+keywords = "rust,programming,print,book"
+
+[pdf.frontmatter_numbering]
+style = "RomanLower"
+start = 1
+
+[pdf.source_numbering]
+style = "Arabic"
+start = 1
+
+[pdf.appendix_numbering]
+style = "Arabic"
+start = 1

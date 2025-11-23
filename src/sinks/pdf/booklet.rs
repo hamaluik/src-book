@@ -8,7 +8,13 @@
 //! The output is designed for duplex printing: print the PDF, fold the stack
 //! in half, and staple along the spine.
 //!
-//! ## Image handling
+//! ## Document Metadata
+//!
+//! The booklet PDF receives the same document metadata as the main PDF (title,
+//! author, subject, keywords, creator) with " (Booklet)" appended to the title
+//! to distinguish it in file browsers and PDF viewers.
+//!
+//! ## Image Handling
 //!
 //! Images cannot be directly cloned between PDF documents because `ImageLayout`
 //! stores only an arena index, not the image data. To support images in booklets,
@@ -24,6 +30,7 @@ use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::{FontIds, LoadedFonts};
 use crate::sinks::pdf::imposition::{calculate_imposition, create_imposed_page, BookletConfig};
 use crate::sinks::pdf::rendering::ImagePathMap;
+use crate::source::Source;
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use pdf_gen::id_arena_crate::Id;
@@ -36,12 +43,14 @@ use std::path::PathBuf;
 /// This creates Form XObjects from each page's content and arranges them
 /// 2-up on larger sheets according to saddle-stitch signature imposition.
 ///
-/// Images are reloaded from disk using the paths recorded in `image_paths` during
-/// initial rendering, then remapped to new indices in the booklet document.
+/// The `source` parameter provides book metadata (title, authors) for setting
+/// PDF document properties. Images are reloaded from disk using paths recorded
+/// in `image_paths` during initial rendering, then remapped to new indices.
 ///
 /// Returns the number of physical sheets needed to print the booklet.
 pub fn render_booklet(
     config: &PDF,
+    source: &Source,
     source_doc: &Document,
     source_font_ids: &FontIds,
     image_paths: &ImagePathMap,
@@ -62,6 +71,29 @@ pub fn render_booklet(
 
     // create a new document for the booklet
     let mut booklet_doc = Document::default();
+
+    // set PDF metadata for the booklet
+    let mut info = Info::default();
+    if let Some(title) = &source.title {
+        info.title(format!("{} (Booklet)", title));
+    }
+    let authors = source
+        .authors
+        .iter()
+        .map(ToString::to_string)
+        .collect::<Vec<String>>()
+        .join(" ");
+    if !authors.trim().is_empty() {
+        info.author(authors);
+    }
+    if let Some(subject) = &config.subject {
+        info.subject(subject);
+    }
+    if let Some(keywords) = &config.keywords {
+        info.keywords(keywords);
+    }
+    info.creator(concat!("src-book v", env!("CARGO_PKG_VERSION")));
+    booklet_doc.set_info(info);
 
     // reload fonts for the booklet document (fonts can't be cloned)
     let fonts = LoadedFonts::load(&config.font)

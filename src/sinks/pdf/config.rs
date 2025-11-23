@@ -326,6 +326,20 @@ pub struct PDF {
     #[serde(default = "default_colophon_template")]
     pub colophon_template: String,
 
+    // PDF document metadata
+    // These populate the PDF document info dictionary, visible in PDF viewers
+    // under "Properties" or "Document Info". Title and author are set automatically
+    // from the source configuration; subject and keywords are optional extras.
+
+    /// Subject/description for PDF document properties.
+    /// Appears in PDF viewer document info alongside title and author.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject: Option<String>,
+    /// Keywords for PDF document properties (comma-separated recommended).
+    /// Useful for document indexing and searchability.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keywords: Option<String>,
+
     // Section-specific page numbering
     /// Page numbering for frontmatter section (default: Roman lowercase, start 1)
     #[serde(default = "default_frontmatter_numbering")]
@@ -455,6 +469,8 @@ impl Default for PDF {
             footer_position: Position::default(),
             footer_rule: RulePosition::default(),
             colophon_template: default_colophon_template(),
+            subject: None,
+            keywords: None,
             frontmatter_numbering: default_frontmatter_numbering(),
             source_numbering: SectionNumbering::default(),
             appendix_numbering: SectionNumbering::default(),

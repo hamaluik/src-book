@@ -4,12 +4,23 @@
 //! images, commit history, and table of contents. Manages hierarchical PDF bookmarks
 //! for navigation.
 //!
+//! ## Document Metadata
+//!
+//! PDF document properties (title, author, subject, keywords, creator) are set from
+//! the source configuration and PDF settings. These appear in PDF viewers under
+//! "Document Properties" or similar. The creator field identifies src-book as the
+//! generating tool.
+//!
+//! ## Content Rendering
+//!
 //! Frontmatter files (README, LICENSE, etc.) are rendered first with their own
 //! bookmark section, providing readers with project context before diving into code.
 //!
 //! The render function accepts a progress bar from the caller, updating it with the
 //! current file name and incrementing after each file is processed. This provides
 //! visual feedback during long renders of large repositories.
+//!
+//! ## Cross-Document Resources
 //!
 //! Image file paths are tracked in an [`ImagePathMap`] during rendering so that
 //! booklet generation can reload images into its separate document. See the
@@ -90,6 +101,14 @@ impl PDF {
         if !authors.trim().is_empty() {
             info.author(authors);
         }
+        if let Some(subject) = &self.subject {
+            info.subject(subject);
+        }
+        if let Some(keywords) = &self.keywords {
+            info.keywords(keywords);
+        }
+        info.creator(concat!("src-book v", env!("CARGO_PKG_VERSION")));
+        doc.set_info(info);
 
         title_page::render(self, &mut doc, &font_ids, source)
             .with_context(|| "Failed to render title page")?;
@@ -346,7 +365,7 @@ impl PDF {
 
         // generate booklet PDF if configured
         let booklet_sheets = if let Some(booklet_path) = &self.booklet_outfile {
-            let sheets = render_booklet(self, &doc, &font_ids, &image_paths, booklet_path)
+            let sheets = render_booklet(self, source, &doc, &font_ids, &image_paths, booklet_path)
                 .with_context(|| "Failed to render booklet PDF")?;
             Some(sheets)
         } else {
