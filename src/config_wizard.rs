@@ -110,7 +110,7 @@ pub fn run() -> Result<()> {
         true // default to true even if no submodules, for consistency
     };
 
-    let repo = GitRepository::load(&repo_path, block_globs, exclude_submodules)
+    let repo = GitRepository::load(&repo_path, block_globs.clone(), exclude_submodules)
         .with_context(|| format!("Failed to load git repository at {}", repo_path.display()))?;
 
     let mut authors = repo.authors.clone();
@@ -257,6 +257,12 @@ pub fn run() -> Result<()> {
         .interact()?;
     let commit_order = CommitOrder::all()[commit_order_idx];
 
+    // convert GlobMatchers to strings for serialisation
+    let block_glob_strings: Vec<String> = block_globs
+        .iter()
+        .map(|gm| gm.glob().glob().to_string())
+        .collect();
+
     let source = Source {
         title: Some(title),
         authors,
@@ -264,6 +270,8 @@ pub fn run() -> Result<()> {
         source_files,
         licenses,
         repository: repo_path,
+        block_globs: block_glob_strings,
+        exclude_submodules,
         entrypoint,
         commit_order,
     };

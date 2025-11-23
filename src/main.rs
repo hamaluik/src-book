@@ -14,6 +14,7 @@ mod sinks {
     pub use pdf::{PageSize, SyntaxTheme, PDF};
 }
 mod source;
+mod update;
 
 fn main() -> ExitCode {
     if let Err(e) = try_main() {
@@ -30,6 +31,7 @@ fn try_main() -> Result<()> {
 
     match &cli.command {
         cli::Commands::Config => config_wizard::run(),
+        cli::Commands::Update => update::run(),
         cli::Commands::Render => {
             println!("Loading configuration...");
             let contents = std::fs::read_to_string("src-book.toml")

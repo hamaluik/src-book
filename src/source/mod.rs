@@ -30,6 +30,18 @@ pub struct Source {
     /// Path to the git repository root
     pub repository: PathBuf,
 
+    /// Glob patterns to exclude from the source file list (e.g., "*.generated.rs").
+    /// Stored in config so the `update` command can re-apply the same filters when
+    /// refreshing file lists.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub block_globs: Vec<String>,
+
+    /// Whether to exclude files in git submodule directories.
+    /// Submodules often contain external dependencies that would bloat the book.
+    /// Stored in config so the `update` command respects the original choice.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub exclude_submodules: bool,
+
     /// Optional entrypoint file (e.g., `src/main.rs`) that controls file ordering.
     /// When set, the entrypoint appears first, followed by sibling files in its directory,
     /// then subdirectories, then everything else. Helps readers start at the logical entry
