@@ -47,14 +47,14 @@ source_files = [
 user_names = []
 name = "Kenton Hamaluik"
 email = "kenton@hamaluik.ca"
-prominence = 31
+prominence = 33
 
 [pdf]
 font = "SourceCodePro"
 theme = "Solarized (light)"
 outfile = "src-book.pdf"
-page_width_in = 5.5
-page_height_in = 8.5
+page_width_in = 4.25
+page_height_in = 5.5
 margin_top_in = 0.5
 margin_outer_in = 0.125
 margin_bottom_in = 0.25
@@ -64,6 +64,7 @@ font_size_heading_pt = 19.0
 font_size_subheading_pt = 10.0
 font_size_body_pt = 8.0
 font_size_small_pt = 6.0
+booklet_outfile = "src-book-booklet.pdf"
 booklet_signature_size = 16
 booklet_sheet_width_in = 11.0
 booklet_sheet_height_in = 8.5

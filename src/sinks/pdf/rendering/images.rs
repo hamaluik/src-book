@@ -4,7 +4,7 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::{header, PAGE_SIZE};
+use crate::sinks::pdf::rendering::{header, ImagePathMap};
 use anyhow::Result;
 use chrono::TimeZone;
 use pdf_gen::layout::Margins;
@@ -12,7 +12,15 @@ use pdf_gen::*;
 use std::path::Path;
 
 /// Render an image file as a full page with header and metadata.
-pub fn render(config: &PDF, doc: &mut Document, font_ids: &FontIds, path: &Path) -> Result<usize> {
+///
+/// Records the image path in `image_paths` so booklet rendering can reload the image.
+pub fn render(
+    config: &PDF,
+    doc: &mut Document,
+    font_ids: &FontIds,
+    path: &Path,
+    image_paths: &mut ImagePathMap,
+) -> Result<usize> {
     let subheading_size = Pt(config.font_size_subheading_pt);
     let small_size = Pt(config.font_size_small_pt);
 
@@ -21,6 +29,9 @@ pub fn render(config: &PDF, doc: &mut Document, font_ids: &FontIds, path: &Path)
     let image_id = doc.add_image(image);
     let image_index = image_id.index();
 
+    // record path for booklet rendering
+    image_paths.insert(image_index, path.to_path_buf());
+
     let margins = Margins::trbl(
         In(0.25).into(),
         In(0.25).into(),
@@ -28,7 +39,7 @@ pub fn render(config: &PDF, doc: &mut Document, font_ids: &FontIds, path: &Path)
         In(0.25).into(),
     )
     .with_gutter(In(0.25).into(), doc.page_order.len());
-    let mut page = Page::new(PAGE_SIZE, Some(margins));
+    let mut page = Page::new(config.page_size(), Some(margins));
 
     header::render_header(config, doc, font_ids, &mut page, path.display())?;
 

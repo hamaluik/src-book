@@ -6,7 +6,7 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::{header, hex_dump, PAGE_SIZE};
+use crate::sinks::pdf::rendering::{header, hex_dump};
 use anyhow::{Context, Result};
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
@@ -166,7 +166,7 @@ pub fn render(
             In(0.25).into(),
         )
         .with_gutter(In(0.25).into(), doc.page_order.len());
-        let page_size = PAGE_SIZE;
+        let page_size = config.page_size();
 
         let mut page = Page::new(page_size, Some(margins));
         let start = layout::baseline_start(&page, &doc.fonts[font_ids.regular], text_size);

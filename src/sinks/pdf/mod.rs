@@ -13,4 +13,4 @@ mod fonts;
 mod imposition;
 mod rendering;
 
-pub use config::{SyntaxTheme, PDF};
+pub use config::{PageSize, SyntaxTheme, PDF};

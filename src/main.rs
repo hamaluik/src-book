@@ -11,7 +11,7 @@ mod file_ordering;
 mod highlight;
 mod sinks {
     mod pdf;
-    pub use pdf::{SyntaxTheme, PDF};
+    pub use pdf::{PageSize, SyntaxTheme, PDF};
 }
 mod source;
 
@@ -55,7 +55,6 @@ fn try_main() -> Result<()> {
                     .render(&source, &progress)
                     .with_context(|| "Failed to render PDF")?;
 
-                progress.finish_with_message("Done!");
                 println!();
                 println!("  Main PDF:    {}", pdf.outfile.display());
 

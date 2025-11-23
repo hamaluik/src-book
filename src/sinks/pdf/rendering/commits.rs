@@ -5,7 +5,7 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::{header, PAGE_SIZE};
+use crate::sinks::pdf::rendering::header;
 use crate::source::Commit;
 use anyhow::Result;
 use pdf_gen::layout::Margins;
@@ -88,7 +88,7 @@ pub fn render(
             In(0.25).into(),
         )
         .with_gutter(In(0.25).into(), doc.page_order.len().saturating_sub(1));
-        let page_size = PAGE_SIZE;
+        let page_size = config.page_size();
 
         // insert a blank page so we open to the correct side
         if first_page.is_none() && doc.page_order.len() % 2 == 1 {

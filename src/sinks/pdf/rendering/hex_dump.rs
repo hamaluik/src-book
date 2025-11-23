@@ -25,7 +25,7 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::{header, PAGE_SIZE};
+use crate::sinks::pdf::rendering::header;
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
 use std::path::Path;
@@ -130,8 +130,9 @@ pub fn render(
     let text_size = Pt(config.font_size_body_pt);
 
     // sanity check: ensure at least one byte (2 hex chars) fits per line
+    let page_size = config.page_size();
     let byte_width = layout::width_of_text("00", &doc.fonts[font_ids.regular], hex_size);
-    let content_width = PAGE_SIZE.0 - In(0.5).into() - In(0.25).into(); // margins
+    let content_width = page_size.0 - In(0.5).into() - In(0.25).into(); // margins
     if byte_width > content_width {
         return None;
     }
@@ -184,7 +185,6 @@ pub fn render(
             In(0.25).into(),
         )
         .with_gutter(In(0.25).into(), doc.page_order.len());
-        let page_size = PAGE_SIZE;
 
         let mut page = Page::new(page_size, Some(margins));
         let start = layout::baseline_start(&page, &doc.fonts[font_ids.regular], text_size);

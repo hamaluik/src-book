@@ -10,6 +10,10 @@
 //! The render function accepts a progress bar from the caller, updating it with the
 //! current file name and incrementing after each file is processed. This provides
 //! visual feedback during long renders of large repositories.
+//!
+//! Image file paths are tracked in an [`ImagePathMap`] during rendering so that
+//! booklet generation can reload images into its separate document. See the
+//! [`crate::sinks::pdf::booklet`] module for details on why this is necessary.
 
 mod commits;
 mod header;
@@ -33,7 +37,9 @@ use std::rc::Rc;
 use syntect::highlighting::ThemeSet;
 use syntect::parsing::SyntaxSet;
 
-pub const PAGE_SIZE: (Pt, Pt) = (Pt(5.5 * 72.0), Pt(8.5 * 72.0));
+/// Maps image arena indices to their original file paths.
+/// Used by booklet rendering to reload images into the booklet document.
+pub type ImagePathMap = HashMap<usize, PathBuf>;
 
 impl PDF {
     pub fn render(&self, source: &Source, progress: &ProgressBar) -> Result<RenderStats> {
@@ -60,6 +66,9 @@ impl PDF {
             bold_italic: doc.add_font(fonts.bold_italic),
         };
 
+        // track image paths for booklet rendering
+        let mut image_paths: ImagePathMap = HashMap::new();
+
         let mut info = Info::default();
         if let Some(title) = &source.title {
             info.title(title);
@@ -77,7 +86,7 @@ impl PDF {
         title_page::render(self, &mut doc, &font_ids, source)
             .with_context(|| "Failed to render title page")?;
         // add a blank page after the title page so we start on the right
-        doc.add_page(Page::new(PAGE_SIZE, None));
+        doc.add_page(Page::new(self.page_size(), None));
 
         doc.add_bookmark(None, "Title", 0).borrow_mut().bolded();
         doc.add_bookmark(None, "Table of Contents", 2)
@@ -111,7 +120,8 @@ impl PDF {
                 {
                     "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
                     | "tiff" => {
-                        let page_index = images::render(self, &mut doc, &font_ids, file)?;
+                        let page_index =
+                            images::render(self, &mut doc, &font_ids, file, &mut image_paths)?;
                         let file_name = file
                             .file_name()
                             .map(|n| n.to_string_lossy().to_string())
@@ -174,7 +184,8 @@ impl PDF {
             {
                 "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
                 | "tiff" => {
-                    let page_index = images::render(self, &mut doc, &font_ids, file)?;
+                    let page_index =
+                        images::render(self, &mut doc, &font_ids, file, &mut image_paths)?;
                     let parent_bookmark = get_or_create_folder_bookmark(
                         &mut doc,
                         &mut folder_bookmarks,
@@ -217,6 +228,8 @@ impl PDF {
 
             progress.inc(1);
         }
+
+        progress.finish_with_message("Files rendered");
 
         let commit_list = source
             .commits()
@@ -280,7 +293,7 @@ impl PDF {
 
         // generate booklet PDF if configured
         let booklet_sheets = if let Some(booklet_path) = &self.booklet_outfile {
-            let sheets = render_booklet(self, &doc, &font_ids, booklet_path)
+            let sheets = render_booklet(self, &doc, &font_ids, &image_paths, booklet_path)
                 .with_context(|| "Failed to render booklet PDF")?;
             Some(sheets)
         } else {

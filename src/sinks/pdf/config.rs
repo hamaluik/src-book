@@ -1,3 +1,4 @@
+use pdf_gen::Pt;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
@@ -37,6 +38,57 @@ impl SyntaxTheme {
             SyntaxTheme::Gruvbox,
             SyntaxTheme::GitHub,
         ]
+    }
+}
+
+/// Preset page sizes for the PDF output.
+#[derive(Copy, Clone, Eq, PartialEq, Debug)]
+pub enum PageSize {
+    /// Half US Letter (5.5" × 8.5")
+    HalfLetter,
+    /// ISO A5 (148mm × 210mm ≈ 5.83" × 8.27")
+    A5,
+    /// ISO A6 (105mm × 148mm ≈ 4.13" × 5.83")
+    A6,
+    /// Quarter US Letter (4.25" × 5.5")
+    QuarterLetter,
+    /// Custom dimensions
+    Custom,
+}
+
+impl fmt::Display for PageSize {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PageSize::HalfLetter => write!(f, "Half Letter (5.5\" × 8.5\")"),
+            PageSize::A5 => write!(f, "A5 (5.83\" × 8.27\")"),
+            PageSize::A6 => write!(f, "A6 (4.13\" × 5.83\")"),
+            PageSize::QuarterLetter => write!(f, "Quarter Letter (4.25\" × 5.5\")"),
+            PageSize::Custom => write!(f, "Custom"),
+        }
+    }
+}
+
+impl PageSize {
+    pub fn all() -> &'static [PageSize] {
+        &[
+            PageSize::HalfLetter,
+            PageSize::A5,
+            PageSize::A6,
+            PageSize::QuarterLetter,
+            PageSize::Custom,
+        ]
+    }
+
+    /// Returns (width, height) in inches for preset sizes.
+    /// Returns None for Custom (caller should use config values).
+    pub fn dimensions_in(&self) -> Option<(f32, f32)> {
+        match self {
+            PageSize::HalfLetter => Some((5.5, 8.5)),
+            PageSize::A5 => Some((5.83, 8.27)),
+            PageSize::A6 => Some((4.13, 5.83)),
+            PageSize::QuarterLetter => Some((4.25, 5.5)),
+            PageSize::Custom => None,
+        }
     }
 }
 
@@ -157,6 +209,16 @@ impl Default for PDF {
             binary_hex_max_bytes: default_binary_hex_max_bytes(),
             font_size_hex_pt: default_font_size_hex(),
         }
+    }
+}
+
+impl PDF {
+    /// Returns the page size as (width, height) in points.
+    pub fn page_size(&self) -> (Pt, Pt) {
+        (
+            Pt(self.page_width_in * 72.0),
+            Pt(self.page_height_in * 72.0),
+        )
     }
 }
 

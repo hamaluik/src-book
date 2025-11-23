@@ -14,7 +14,6 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::PAGE_SIZE;
 use anyhow::Result;
 use owned_ttf_parser::AsFaceRef;
 use pdf_gen::id_arena_crate::Id;
@@ -165,6 +164,7 @@ pub fn render(
     source_pages: HashMap<PathBuf, usize>,
     git_history_page: Option<usize>,
 ) -> Result<usize> {
+    let page_size = config.page_size();
     let contents_size = Pt(config.font_size_heading_pt);
     let entry_size = Pt(config.font_size_body_pt);
     let subheading_size = Pt(config.font_size_subheading_pt);
@@ -235,7 +235,7 @@ pub fn render(
     // pre-calculate how many TOC pages we'll need so intradocument links are correct
     let num_toc_pages = {
         // create a temporary page to calculate layout metrics
-        let temp_page = Page::new(PAGE_SIZE, Some(Margins::all(In(0.5))));
+        let temp_page = Page::new(page_size, Some(Margins::all(In(0.5))));
         let (_, start_y_first) =
             layout::baseline_start(&temp_page, &doc.fonts[font_ids.bold], contents_size);
         let (_, start_y_subsequent) =
@@ -264,7 +264,7 @@ pub fn render(
 
     let mut pages: Vec<Page> = Vec::default();
     while !entries.is_empty() {
-        let mut page = Page::new(PAGE_SIZE, Some(Margins::all(In(0.5))));
+        let mut page = Page::new(page_size, Some(Margins::all(In(0.5))));
 
         let start = if pages.is_empty() {
             layout::baseline_start(&page, &doc.fonts[font_ids.bold], contents_size)
@@ -350,7 +350,7 @@ pub fn render(
 
     // add a blank page after the contents to keep the booklet even
     if pages.len() % 2 == 1 {
-        pages.push(Page::new(PAGE_SIZE, None));
+        pages.push(Page::new(page_size, None));
     }
 
     let added_page_count = pages.len();

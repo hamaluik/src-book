@@ -8,19 +8,27 @@
 //! The output is designed for duplex printing: print the PDF, fold the stack
 //! in half, and staple along the spine.
 //!
+//! ## Image handling
+//!
+//! Images cannot be directly cloned between PDF documents because `ImageLayout`
+//! stores only an arena index, not the image data. To support images in booklets,
+//! the main render pass tracks each image's source path in an `ImagePathMap`.
+//! During booklet generation, images are reloaded from disk and assigned new
+//! indices. A remapping table ensures each unique image is loaded only once,
+//! even if it appears on multiple pages.
+//!
 //! Displays a progress bar during XObject creation since this can take time
 //! for large documents (one XObject per page).
-//!
-//! **Limitation**: Images are not currently supported in booklet output due to
-//! the way Form XObjects work. Only text content is rendered.
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::{FontIds, LoadedFonts};
 use crate::sinks::pdf::imposition::{calculate_imposition, create_imposed_page, BookletConfig};
+use crate::sinks::pdf::rendering::ImagePathMap;
 use anyhow::{Context, Result};
 use indicatif::{ProgressBar, ProgressStyle};
 use pdf_gen::id_arena_crate::Id;
 use pdf_gen::*;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 /// Generate a print-ready booklet PDF from the digital document.
@@ -28,11 +36,15 @@ use std::path::PathBuf;
 /// This creates Form XObjects from each page's content and arranges them
 /// 2-up on larger sheets according to saddle-stitch signature imposition.
 ///
+/// Images are reloaded from disk using the paths recorded in `image_paths` during
+/// initial rendering, then remapped to new indices in the booklet document.
+///
 /// Returns the number of physical sheets needed to print the booklet.
 pub fn render_booklet(
     config: &PDF,
     source_doc: &Document,
     source_font_ids: &FontIds,
+    image_paths: &ImagePathMap,
     output_path: &PathBuf,
 ) -> Result<usize> {
     let page_width = Pt(config.page_width_in * 72.0);
@@ -61,8 +73,8 @@ pub fn render_booklet(
         bold_italic: booklet_doc.add_font(fonts.bold_italic),
     };
 
-    // TODO: track image paths during initial rendering to enable booklet image support
-    // for now, images won't be rendered in the booklet (only text content)
+    // maps source image indices to booklet document image indices
+    let mut image_remap: HashMap<usize, usize> = HashMap::new();
 
     // create Form XObjects from each source page
     let progress = ProgressBar::new(source_doc.page_order.len() as u64);
@@ -105,10 +117,27 @@ pub fn render_booklet(
                         });
                     }
                 }
-                PageContents::Image(_img) => {
-                    // images cannot be easily cloned; skip for now
-                    // the booklet will show text content only
-                    // TODO: implement image support by tracking source paths
+                PageContents::Image(img) => {
+                    // remap image index or load from disk if not yet in booklet doc
+                    let new_index = if let Some(&idx) = image_remap.get(&img.image_index) {
+                        idx
+                    } else if let Some(path) = image_paths.get(&img.image_index) {
+                        let image = Image::new_from_disk(path).with_context(|| {
+                            format!("Failed to reload image '{}' for booklet", path.display())
+                        })?;
+                        let new_id = booklet_doc.add_image(image);
+                        let new_idx = new_id.index();
+                        image_remap.insert(img.image_index, new_idx);
+                        new_idx
+                    } else {
+                        // image path not recorded; skip this image
+                        continue;
+                    };
+
+                    xobj.add_image(ImageLayout {
+                        image_index: new_index,
+                        position: img.position,
+                    });
                 }
                 PageContents::RawContent(raw) => {
                     xobj.add_raw_content(raw.clone());

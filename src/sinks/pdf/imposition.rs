@@ -145,8 +145,8 @@ pub fn calculate_imposition(total_pages: usize, signature_size: u32) -> Vec<Prin
 
 /// Create a booklet page with two logical pages placed side by side.
 ///
-/// The left page is placed at x=0, the right page at x=page_width.
-/// Both are scaled to fit within the sheet dimensions.
+/// Each page is scaled to fit within its half of the sheet and centred
+/// both horizontally and vertically within that half.
 pub fn create_imposed_page(
     config: &BookletConfig,
     left_xobj: Option<Id<FormXObject>>,
@@ -163,20 +163,23 @@ pub fn create_imposed_page(
     let scale_y = *available_height / *config.page_height;
     let scale = scale_x.min(scale_y);
 
-    // centre the pages vertically if there's extra space
+    // centre pages within their half of the sheet
+    let scaled_width = *config.page_width * scale;
     let scaled_height = *config.page_height * scale;
+    let x_offset = (*available_width - scaled_width) / 2.0;
     let y_offset = (*available_height - scaled_height) / 2.0;
 
-    // place left page
+    // place left page (centred in left half)
+    // scale first, then translate - order matters for matrix composition
     if let Some(xobj_id) = left_xobj {
-        let transform = Transform::translate(Pt(0.0), Pt(y_offset)).with_scale(scale, scale);
+        let transform = Transform::scale(scale, scale).with_translate(Pt(x_offset), Pt(y_offset));
         page.add_form_xobject(FormXObjectLayout { xobj_id, transform });
     }
 
-    // place right page
+    // place right page (centred in right half)
     if let Some(xobj_id) = right_xobj {
-        let transform =
-            Transform::translate(Pt(*available_width), Pt(y_offset)).with_scale(scale, scale);
+        let transform = Transform::scale(scale, scale)
+            .with_translate(Pt(*available_width + x_offset), Pt(y_offset));
         page.add_form_xobject(FormXObjectLayout { xobj_id, transform });
     }
 

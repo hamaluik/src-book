@@ -9,7 +9,7 @@
 
 use crate::detection::{detect_defaults, detect_frontmatter, DetectedDefaults};
 use crate::file_ordering::{sort_paths, sort_with_entrypoint};
-use crate::sinks::{SyntaxTheme, PDF};
+use crate::sinks::{PageSize, SyntaxTheme, PDF};
 use crate::source::{AuthorBuilder, CommitOrder, GitRepository, Source};
 use anyhow::{anyhow, Context, Result};
 use dialoguer::theme::ColorfulTheme;
@@ -293,6 +293,28 @@ pub fn run() -> Result<()> {
             .interact()?;
         let syntax_theme = SyntaxTheme::all()[syntax_theme];
 
+        let page_size_idx = FuzzySelect::with_theme(&theme)
+            .with_prompt("Page size")
+            .items(PageSize::all())
+            .default(0)
+            .interact()?;
+        let page_size = PageSize::all()[page_size_idx];
+
+        let (page_width_in, page_height_in) = if let Some(dims) = page_size.dimensions_in() {
+            dims
+        } else {
+            // custom dimensions
+            let width: f32 = Input::with_theme(&theme)
+                .with_prompt("Page width in inches")
+                .default(5.5)
+                .interact()?;
+            let height: f32 = Input::with_theme(&theme)
+                .with_prompt("Page height in inches")
+                .default(8.5)
+                .interact()?;
+            (width, height)
+        };
+
         let base_font_size: f32 = Input::with_theme(&theme)
             .with_prompt("Base font size in points")
             .default(8.0)
@@ -389,6 +411,8 @@ pub fn run() -> Result<()> {
         pdf = Some(PDF {
             outfile,
             theme: syntax_theme,
+            page_width_in,
+            page_height_in,
             font_size_title_pt,
             font_size_heading_pt,
             font_size_subheading_pt,

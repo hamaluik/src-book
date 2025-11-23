@@ -4,7 +4,6 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::PAGE_SIZE;
 use crate::source::Source;
 use anyhow::Result;
 use pdf_gen::*;
@@ -16,7 +15,7 @@ pub fn render(config: &PDF, doc: &mut Document, font_ids: &FontIds, source: &Sou
     let size_author = Pt(config.font_size_body_pt);
     const SPACING: Pt = Pt(72.0 * 0.5);
 
-    let page_size = PAGE_SIZE;
+    let page_size = config.page_size();
     let descent_title = doc.fonts[font_ids.bold].descent(size_title);
 
     let title = source.title.clone().unwrap_or("untitled".to_string());
