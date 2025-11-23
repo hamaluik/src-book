@@ -14,17 +14,24 @@
 //! Image file paths are tracked in an [`ImagePathMap`] during rendering so that
 //! booklet generation can reload images into its separate document. See the
 //! [`crate::sinks::pdf::booklet`] module for details on why this is necessary.
+//!
+//! Page metadata ([`PageMetadata`]) is collected for each content page during rendering,
+//! tracking which source file each page belongs to. After all content is rendered,
+//! headers and footers are applied via [`header_footer::render_headers_and_footers()`],
+//! which uses this metadata to populate template placeholders like `{file}`.
 
 mod commits;
-mod header;
+mod header_footer;
 mod hex_dump;
 mod images;
 mod source_file;
 mod table_of_contents;
 mod title_page;
 
+pub use header_footer::PageMetadata;
+
 use crate::sinks::pdf::booklet::render_booklet;
-use crate::sinks::pdf::config::{RenderStats, PDF};
+use crate::sinks::pdf::config::{RenderStats, Section, PDF};
 use crate::sinks::pdf::fonts::{FontIds, LoadedFonts};
 use crate::source::Source;
 use anyhow::{Context, Result};
@@ -96,6 +103,12 @@ impl PDF {
         let mut frontmatter_pages: HashMap<PathBuf, usize> = HashMap::new();
         let mut source_pages: HashMap<PathBuf, usize> = HashMap::new();
         let mut page_offset = doc.page_order.len();
+        // track metadata for each content page (for header/footer rendering)
+        let mut page_metadata: Vec<PageMetadata> = Vec::new();
+        // track page counts within each section for section-specific numbering
+        let mut frontmatter_page_count: usize = 0;
+        let mut source_page_count: usize = 0;
+        let mut appendix_page_count: usize = 0;
 
         // render frontmatter files first if present
         if !source.frontmatter_files.is_empty() {
@@ -122,6 +135,12 @@ impl PDF {
                     | "tiff" => {
                         let page_index =
                             images::render(self, &mut doc, &font_ids, file, &mut image_paths)?;
+                        // images are single pages
+                        page_metadata.push(
+                            PageMetadata::new(Section::Frontmatter, frontmatter_page_count)
+                                .with_file(file.display().to_string()),
+                        );
+                        frontmatter_page_count += 1;
                         let file_name = file
                             .file_name()
                             .map(|n| n.to_string_lossy().to_string())
@@ -129,7 +148,7 @@ impl PDF {
                         doc.add_bookmark(Some(frontmatter_bookmark.clone()), file_name, page_index);
                     }
                     _ => {
-                        if let Some(page_index) = source_file::render(
+                        let result = source_file::render(
                             self,
                             &mut doc,
                             &font_ids,
@@ -139,7 +158,19 @@ impl PDF {
                         )
                         .with_context(|| {
                             format!("Failed to render frontmatter file {}!", file.display())
-                        })? {
+                        })?;
+
+                        // track metadata for each page rendered
+                        let file_display = file.display().to_string();
+                        for _ in 0..result.page_count {
+                            page_metadata.push(
+                                PageMetadata::new(Section::Frontmatter, frontmatter_page_count)
+                                    .with_file(file_display.clone()),
+                            );
+                            frontmatter_page_count += 1;
+                        }
+
+                        if let Some(page_index) = result.first_page {
                             let file_name = file
                                 .file_name()
                                 .map(|n| n.to_string_lossy().to_string())
@@ -186,6 +217,12 @@ impl PDF {
                 | "tiff" => {
                     let page_index =
                         images::render(self, &mut doc, &font_ids, file, &mut image_paths)?;
+                    // images are single pages
+                    page_metadata.push(
+                        PageMetadata::new(Section::Source, source_page_count)
+                            .with_file(file.display().to_string()),
+                    );
+                    source_page_count += 1;
                     let parent_bookmark = get_or_create_folder_bookmark(
                         &mut doc,
                         &mut folder_bookmarks,
@@ -200,7 +237,7 @@ impl PDF {
                     doc.add_bookmark(Some(parent_bookmark), file_name, page_index);
                 }
                 _ => {
-                    if let Some(page_index) = source_file::render(
+                    let result = source_file::render(
                         self,
                         &mut doc,
                         &font_ids,
@@ -208,8 +245,19 @@ impl PDF {
                         &ss,
                         &ts.themes[self.theme.name()],
                     )
-                    .with_context(|| format!("Failed to render source file {}!", file.display()))?
-                    {
+                    .with_context(|| format!("Failed to render source file {}!", file.display()))?;
+
+                    // track metadata for each page rendered
+                    let file_display = file.display().to_string();
+                    for _ in 0..result.page_count {
+                        page_metadata.push(
+                            PageMetadata::new(Section::Source, source_page_count)
+                                .with_file(file_display.clone()),
+                        );
+                        source_page_count += 1;
+                    }
+
+                    if let Some(page_index) = result.first_page {
                         let parent_bookmark = get_or_create_folder_bookmark(
                             &mut doc,
                             &mut folder_bookmarks,
@@ -231,6 +279,9 @@ impl PDF {
 
         progress.finish_with_message("Files rendered");
 
+        // track pages before commit rendering to count commit pages
+        let pages_before_commits = doc.page_order.len();
+
         let commit_list = source
             .commits()
             .with_context(|| "Failed to get commits for repository")?;
@@ -238,6 +289,13 @@ impl PDF {
             .with_context(|| "Failed to render commit history")?;
         if let Some(commit_page) = commit_page_index {
             doc.add_bookmark(None, "Commit History", commit_page);
+        }
+
+        // track commit pages as appendix (no file path for commit history)
+        let commit_page_count = doc.page_order.len() - pages_before_commits;
+        for _ in 0..commit_page_count {
+            page_metadata.push(PageMetadata::new(Section::Appendix, appendix_page_count));
+            appendix_page_count += 1;
         }
 
         let num_toc_pages = table_of_contents::render(
@@ -260,34 +318,16 @@ impl PDF {
             }
         }
 
-        // add page numbers
-        let page_number_size = Pt(self.font_size_small_pt);
-        for (pi, page_id) in doc.page_order.iter().skip(page_offset).enumerate() {
-            let text = format!("{}", pi + 1);
-            let page = doc.pages.get_mut(*page_id).expect("page exists");
-            let coords: (Pt, Pt) = if pi % 2 == 0 {
-                (
-                    page.content_box.x2
-                        - layout::width_of_text(
-                            &text,
-                            &doc.fonts[font_ids.regular],
-                            page_number_size,
-                        ),
-                    In(0.25).into(),
-                )
-            } else {
-                (In(0.25).into(), In(0.25).into())
-            };
-            page.add_span(SpanLayout {
-                text,
-                font: SpanFont {
-                    id: font_ids.regular,
-                    size: page_number_size,
-                },
-                colour: Colour::new_grey(0.25),
-                coords,
-            });
-        }
+        // render headers and footers on all content pages
+        let title = source.title.as_deref();
+        header_footer::render_headers_and_footers(
+            self,
+            &mut doc,
+            &font_ids,
+            page_offset,
+            &page_metadata,
+            title,
+        );
 
         let page_count = doc.page_order.len();
 

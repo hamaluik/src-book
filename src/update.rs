@@ -63,10 +63,7 @@ pub fn run() -> Result<()> {
     // refresh authors from git
     source.authors = repo.authors;
     source.authors.sort();
-    println!(
-        "  Found {} author(s)",
-        source.authors.len()
-    );
+    println!("  Found {} author(s)", source.authors.len());
 
     // get all discovered files (excluding src-book.toml itself)
     let mut discovered_files: Vec<PathBuf> = repo
@@ -202,8 +199,7 @@ pub fn run() -> Result<()> {
     // write back
     let config_str = toml::to_string_pretty(&config)
         .with_context(|| "Failed to serialise configuration to TOML")?;
-    std::fs::write("src-book.toml", config_str)
-        .with_context(|| "Failed to write src-book.toml")?;
+    std::fs::write("src-book.toml", config_str).with_context(|| "Failed to write src-book.toml")?;
 
     // report changes
     println!("\nUpdated src-book.toml:");

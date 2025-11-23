@@ -3,6 +3,148 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
 
+/// Horizontal position for headers and footers.
+#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug, Default)]
+pub enum Position {
+    /// Alternates left/right based on page parity (for bound books)
+    #[default]
+    Outer,
+    /// Always centred
+    Centre,
+    /// Alternates right/left (opposite of Outer)
+    Inner,
+    /// Always left-aligned
+    Left,
+    /// Always right-aligned
+    Right,
+}
+
+impl fmt::Display for Position {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Position::Outer => write!(f, "Outer (alternating for binding)"),
+            Position::Centre => write!(f, "Centre"),
+            Position::Inner => write!(f, "Inner (opposite of Outer)"),
+            Position::Left => write!(f, "Left"),
+            Position::Right => write!(f, "Right"),
+        }
+    }
+}
+
+impl Position {
+    pub fn all() -> &'static [Position] {
+        &[
+            Position::Outer,
+            Position::Centre,
+            Position::Inner,
+            Position::Left,
+            Position::Right,
+        ]
+    }
+}
+
+/// Position of a horizontal rule relative to header/footer text.
+#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug, Default)]
+pub enum RulePosition {
+    /// No rule
+    #[default]
+    None,
+    /// Rule above the text
+    Above,
+    /// Rule below the text
+    Below,
+}
+
+impl fmt::Display for RulePosition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RulePosition::None => write!(f, "None"),
+            RulePosition::Above => write!(f, "Above"),
+            RulePosition::Below => write!(f, "Below"),
+        }
+    }
+}
+
+impl RulePosition {
+    pub fn all() -> &'static [RulePosition] {
+        &[RulePosition::None, RulePosition::Above, RulePosition::Below]
+    }
+}
+
+/// Style for page number formatting.
+#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug, Default)]
+pub enum PageNumberStyle {
+    /// Arabic numerals (1, 2, 3)
+    #[default]
+    Arabic,
+    /// Lowercase Roman numerals (i, ii, iii)
+    RomanLower,
+    /// Uppercase Roman numerals (I, II, III)
+    RomanUpper,
+}
+
+impl fmt::Display for PageNumberStyle {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PageNumberStyle::Arabic => write!(f, "Arabic (1, 2, 3)"),
+            PageNumberStyle::RomanLower => write!(f, "Roman lowercase (i, ii, iii)"),
+            PageNumberStyle::RomanUpper => write!(f, "Roman uppercase (I, II, III)"),
+        }
+    }
+}
+
+/// Document section for section-specific page numbering.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Default)]
+pub enum Section {
+    /// Front matter (README, LICENSE, etc.)
+    #[default]
+    Frontmatter,
+    /// Source code files
+    Source,
+    /// Appendix content (commit history, index, etc.)
+    Appendix,
+}
+
+impl fmt::Display for Section {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Section::Frontmatter => write!(f, "Frontmatter"),
+            Section::Source => write!(f, "Source"),
+            Section::Appendix => write!(f, "Appendix"),
+        }
+    }
+}
+
+/// Page numbering configuration for a document section.
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
+pub struct SectionNumbering {
+    /// Page number style (Arabic, Roman lowercase, Roman uppercase)
+    #[serde(default)]
+    pub style: PageNumberStyle,
+    /// Starting page number for this section
+    #[serde(default = "default_page_number_start")]
+    pub start: i32,
+}
+
+impl Default for SectionNumbering {
+    fn default() -> Self {
+        SectionNumbering {
+            style: PageNumberStyle::Arabic,
+            start: 1,
+        }
+    }
+}
+
+impl SectionNumbering {
+    /// Returns numbering config with Roman lowercase numerals starting at 1.
+    pub fn roman_lower() -> Self {
+        SectionNumbering {
+            style: PageNumberStyle::RomanLower,
+            start: 1,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub enum SyntaxTheme {
     #[serde(rename = "Solarized (light)")]
@@ -98,6 +240,7 @@ impl PageSize {
 /// binding, while outer margins can be smaller. Top margins are typically larger
 /// than bottom to leave room for headers.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(clippy::upper_case_acronyms)]
 pub struct PDF {
     /// Font family name ("SourceCodePro", "FiraMono") or path to custom font
     pub font: String,
@@ -151,6 +294,50 @@ pub struct PDF {
     /// Smaller than body text to fit more content; 5pt is near the legibility limit.
     #[serde(default = "default_font_size_hex")]
     pub font_size_hex_pt: f32,
+
+    // Header/footer configuration
+    /// Header template with placeholders: {file}, {title}, {n}, {total}
+    /// Empty string disables the header.
+    #[serde(default = "default_header_template")]
+    pub header_template: String,
+    /// Header horizontal position
+    #[serde(default)]
+    pub header_position: Position,
+    /// Horizontal rule position relative to header
+    #[serde(default = "default_header_rule")]
+    pub header_rule: RulePosition,
+
+    /// Footer template with placeholders: {file}, {title}, {n}, {total}
+    /// Empty string disables the footer.
+    #[serde(default = "default_footer_template")]
+    pub footer_template: String,
+    /// Footer horizontal position
+    #[serde(default)]
+    pub footer_position: Position,
+    /// Horizontal rule position relative to footer
+    #[serde(default)]
+    pub footer_rule: RulePosition,
+
+    // Section-specific page numbering
+    /// Page numbering for frontmatter section (default: Roman lowercase, start 1)
+    #[serde(default = "default_frontmatter_numbering")]
+    pub frontmatter_numbering: SectionNumbering,
+    /// Page numbering for source code section (default: Arabic, start 1)
+    #[serde(default)]
+    pub source_numbering: SectionNumbering,
+    /// Page numbering for appendix section (default: Arabic, start 1)
+    #[serde(default)]
+    pub appendix_numbering: SectionNumbering,
+
+    // Deprecated: Legacy global page numbering (pre-section support)
+    // These are read from old configs but not written to new ones.
+    // If present, they override section defaults for backwards compatibility.
+    /// Deprecated: use section-specific numbering instead
+    #[serde(default, skip_serializing)]
+    pub(crate) page_number_style: Option<PageNumberStyle>,
+    /// Deprecated: use section-specific numbering instead
+    #[serde(default, skip_serializing)]
+    pub(crate) page_number_start: Option<i32>,
 }
 
 fn default_font_size_title() -> f32 {
@@ -183,6 +370,21 @@ fn default_binary_hex_max_bytes() -> Option<usize> {
 fn default_font_size_hex() -> f32 {
     5.0
 }
+fn default_header_template() -> String {
+    "{file}".to_string()
+}
+fn default_header_rule() -> RulePosition {
+    RulePosition::Below
+}
+fn default_footer_template() -> String {
+    "{n}".to_string()
+}
+fn default_page_number_start() -> i32 {
+    1
+}
+fn default_frontmatter_numbering() -> SectionNumbering {
+    SectionNumbering::roman_lower()
+}
 
 impl Default for PDF {
     fn default() -> Self {
@@ -208,6 +410,17 @@ impl Default for PDF {
             render_binary_hex: false,
             binary_hex_max_bytes: default_binary_hex_max_bytes(),
             font_size_hex_pt: default_font_size_hex(),
+            header_template: default_header_template(),
+            header_position: Position::default(),
+            header_rule: default_header_rule(),
+            footer_template: default_footer_template(),
+            footer_position: Position::default(),
+            footer_rule: RulePosition::default(),
+            frontmatter_numbering: default_frontmatter_numbering(),
+            source_numbering: SectionNumbering::default(),
+            appendix_numbering: SectionNumbering::default(),
+            page_number_style: None,
+            page_number_start: None,
         }
     }
 }
@@ -219,6 +432,28 @@ impl PDF {
             Pt(self.page_width_in * 72.0),
             Pt(self.page_height_in * 72.0),
         )
+    }
+
+    /// Returns the numbering configuration for a given section.
+    ///
+    /// If legacy `page_number_style` or `page_number_start` fields are present,
+    /// they override the section defaults for backwards compatibility.
+    pub fn numbering_for_section(&self, section: Section) -> SectionNumbering {
+        let base = match section {
+            Section::Frontmatter => self.frontmatter_numbering,
+            Section::Source => self.source_numbering,
+            Section::Appendix => self.appendix_numbering,
+        };
+
+        // apply legacy overrides if present
+        if self.page_number_style.is_some() || self.page_number_start.is_some() {
+            SectionNumbering {
+                style: self.page_number_style.unwrap_or(base.style),
+                start: self.page_number_start.unwrap_or(base.start),
+            }
+        } else {
+            base
+        }
     }
 }
 

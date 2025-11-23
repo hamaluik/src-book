@@ -25,7 +25,7 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::header;
+use crate::sinks::pdf::rendering::source_file::RenderResult;
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
 use std::path::Path;
@@ -110,19 +110,21 @@ fn category_colour(category: ByteCategory, theme: &syntect::highlighting::Theme)
 /// available page width. Files exceeding `binary_hex_max_bytes` are truncated with
 /// a notice indicating the limit.
 ///
-/// Returns the page index of the first page, or None if the data was empty or the
-/// hex font size is too large to fit even a single byte on the page.
+/// Returns the first page index and page count.
 pub fn render(
     config: &PDF,
     doc: &mut Document,
     font_ids: &FontIds,
-    path: &Path,
+    _path: &Path,
     data: &[u8],
     truncated: bool,
     theme: &syntect::highlighting::Theme,
-) -> Option<usize> {
+) -> RenderResult {
     if data.is_empty() && !truncated {
-        return None;
+        return RenderResult {
+            first_page: None,
+            page_count: 0,
+        };
     }
 
     let hex_size = Pt(config.font_size_hex_pt);
@@ -134,7 +136,10 @@ pub fn render(
     let byte_width = layout::width_of_text("00", &doc.fonts[font_ids.regular], hex_size);
     let content_width = page_size.0 - In(0.5).into() - In(0.25).into(); // margins
     if byte_width > content_width {
-        return None;
+        return RenderResult {
+            first_page: None,
+            page_count: 0,
+        };
     }
 
     // build hex spans with colours - let layout handle line wrapping
@@ -177,6 +182,7 @@ pub fn render(
 
     // render pages
     let mut first_page = None;
+    let mut page_count = 0;
     while !text.is_empty() {
         let margins = Margins::trbl(
             In(0.25).into(),
@@ -209,19 +215,20 @@ pub fn render(
             break;
         }
 
-        header::render_header(config, doc, font_ids, &mut page, path.display())
-            .expect("can render header");
-
         // no wrap width for hex dump (no line numbers)
         layout::layout_text_natural(doc, &mut page, start, &mut text, Pt(0.0), bbox);
 
         let page_id = doc.add_page(page);
+        page_count += 1;
         if first_page.is_none() {
             first_page = Some(doc.index_of_page(page_id).expect("page was just added"));
         }
     }
 
-    first_page
+    RenderResult {
+        first_page,
+        page_count,
+    }
 }
 
 #[cfg(test)]

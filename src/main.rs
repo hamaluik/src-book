@@ -11,7 +11,7 @@ mod file_ordering;
 mod highlight;
 mod sinks {
     mod pdf;
-    pub use pdf::{PageSize, SyntaxTheme, PDF};
+    pub use pdf::{PageSize, Position, RulePosition, SyntaxTheme, PDF};
 }
 mod source;
 mod update;
@@ -42,8 +42,7 @@ fn try_main() -> Result<()> {
             let Configuration { source, pdf } = config;
 
             if let Some(pdf) = pdf {
-                let total_files =
-                    source.frontmatter_files.len() + source.source_files.len();
+                let total_files = source.frontmatter_files.len() + source.source_files.len();
                 let progress = ProgressBar::new(total_files as u64);
                 progress.set_style(
                     ProgressStyle::default_bar()

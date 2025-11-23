@@ -30,7 +30,7 @@ source_files = [
     "src/source/providers/git_repository.rs",
     "src/source/providers/mod.rs",
     "src/sinks/pdf/rendering/commits.rs",
-    "src/sinks/pdf/rendering/header.rs",
+    "src/sinks/pdf/rendering/header_footer.rs",
     "src/sinks/pdf/rendering/hex_dump.rs",
     "src/sinks/pdf/rendering/images.rs",
     "src/sinks/pdf/rendering/mod.rs",
@@ -50,7 +50,7 @@ source_files = [
 user_names = []
 name = "Kenton Hamaluik"
 email = "kenton@hamaluik.ca"
-prominence = 34
+prominence = 35
 
 [pdf]
 font = "SourceCodePro"
@@ -67,9 +67,28 @@ font_size_heading_pt = 19.0
 font_size_subheading_pt = 10.0
 font_size_body_pt = 8.0
 font_size_small_pt = 6.0
+booklet_outfile = "src-book-booklet.pdf"
 booklet_signature_size = 16
 booklet_sheet_width_in = 11.0
 booklet_sheet_height_in = 8.5
 render_binary_hex = false
 binary_hex_max_bytes = 65536
 font_size_hex_pt = 5.0
+header_template = "{file}"
+header_position = "Outer"
+header_rule = "Below"
+footer_template = "{n}/{total}"
+footer_position = "Outer"
+footer_rule = "Above"
+
+[pdf.frontmatter_numbering]
+style = "RomanLower"
+start = 1
+
+[pdf.source_numbering]
+style = "Arabic"
+start = 1
+
+[pdf.appendix_numbering]
+style = "Arabic"
+start = 1

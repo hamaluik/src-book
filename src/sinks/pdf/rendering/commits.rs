@@ -5,7 +5,6 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::header;
 use crate::source::Commit;
 use anyhow::Result;
 use pdf_gen::layout::Margins;
@@ -118,7 +117,6 @@ pub fn render(
             break;
         }
 
-        header::render_header(config, doc, font_ids, &mut page, "Commit History")?;
         layout::layout_text_natural(doc, &mut page, start, &mut text, wrap_width, bbox);
         let page_id = doc.add_page(page);
         if first_page.is_none() {

@@ -6,10 +6,13 @@
 //!
 //! Frontmatter files (README, LICENSE, etc.) are auto-detected and presented for
 //! selection. Selected files are rendered in their own section before source code.
+//!
+//! Optional header/footer customisation allows template-based text with placeholders,
+//! configurable positions for binding-aware alternation, and choice of page number styles.
 
 use crate::detection::{detect_defaults, detect_frontmatter, DetectedDefaults};
 use crate::file_ordering::{sort_paths, sort_with_entrypoint};
-use crate::sinks::{PageSize, SyntaxTheme, PDF};
+use crate::sinks::{PageSize, Position, RulePosition, SyntaxTheme, PDF};
 use crate::source::{AuthorBuilder, CommitOrder, GitRepository, Source};
 use anyhow::{anyhow, Context, Result};
 use dialoguer::theme::ColorfulTheme;
@@ -416,6 +419,102 @@ pub fn run() -> Result<()> {
             (Some(65536), 5.0)
         };
 
+        // header/footer customisation
+        let (
+            header_template,
+            header_position,
+            header_rule,
+            footer_template,
+            footer_position,
+            footer_rule,
+        ) = if Confirm::with_theme(&theme)
+            .with_prompt("Customise headers and footers?")
+            .default(false)
+            .interact()?
+        {
+            println!("Templates support placeholders: {{file}}, {{title}}, {{n}} (page number), {{total}}");
+
+            let header_template: String = Input::with_theme(&theme)
+                .with_prompt("Header template (empty to disable)")
+                .default("{file}".to_string())
+                .allow_empty(true)
+                .interact()?;
+
+            let header_position = if !header_template.is_empty() {
+                let pos_idx = FuzzySelect::with_theme(&theme)
+                    .with_prompt("Header position")
+                    .items(Position::all())
+                    .default(0)
+                    .interact()?;
+                Position::all()[pos_idx]
+            } else {
+                Position::Outer
+            };
+
+            let header_rule = if !header_template.is_empty() {
+                let rule_idx = FuzzySelect::with_theme(&theme)
+                    .with_prompt("Header rule (horizontal line)")
+                    .items(RulePosition::all())
+                    .default(2) // default to Below
+                    .interact()?;
+                RulePosition::all()[rule_idx]
+            } else {
+                RulePosition::None
+            };
+
+            let footer_template: String = Input::with_theme(&theme)
+                .with_prompt("Footer template (empty to disable)")
+                .default("{n}".to_string())
+                .allow_empty(true)
+                .interact()?;
+
+            let footer_position = if !footer_template.is_empty() {
+                let pos_idx = FuzzySelect::with_theme(&theme)
+                    .with_prompt("Footer position")
+                    .items(Position::all())
+                    .default(0)
+                    .interact()?;
+                Position::all()[pos_idx]
+            } else {
+                Position::Outer
+            };
+
+            let footer_rule = if !footer_template.is_empty() {
+                let rule_idx = FuzzySelect::with_theme(&theme)
+                    .with_prompt("Footer rule (horizontal line)")
+                    .items(RulePosition::all())
+                    .default(0) // default to None
+                    .interact()?;
+                RulePosition::all()[rule_idx]
+            } else {
+                RulePosition::None
+            };
+
+            // section numbering uses sensible defaults:
+            // - frontmatter: Roman numerals (i, ii, iii...)
+            // - source: Arabic numerals (1, 2, 3...)
+            // - appendix: Arabic numerals (1, 2, 3...)
+
+            (
+                header_template,
+                header_position,
+                header_rule,
+                footer_template,
+                footer_position,
+                footer_rule,
+            )
+        } else {
+            // defaults
+            (
+                "{file}".to_string(),
+                Position::Outer,
+                RulePosition::Below,
+                "{n}".to_string(),
+                Position::Outer,
+                RulePosition::None,
+            )
+        };
+
         pdf = Some(PDF {
             outfile,
             theme: syntax_theme,
@@ -433,6 +532,12 @@ pub fn run() -> Result<()> {
             render_binary_hex,
             binary_hex_max_bytes,
             font_size_hex_pt,
+            header_template,
+            header_position,
+            header_rule,
+            footer_template,
+            footer_position,
+            footer_rule,
             ..PDF::default()
         });
     }

@@ -17,6 +17,8 @@ formatted book with syntax highlighting, table of contents, and commit history.
   - Embedded images (PNG, JPG, SVG, etc.)
   - Commit history
   - Hierarchical PDF bookmarks for navigation
+  - Customisable headers and footers with template placeholders
+  - Section-specific page numbering (Roman numerals for frontmatter, etc.)
 - Configurable page dimensions, margins, and fonts
 - Optional booklet PDF output for saddle-stitch binding
 - Entrypoint-aware file ordering for logical reading flow
@@ -55,7 +57,21 @@ This will prompt you for:
 
 The wizard creates a `src-book.toml` configuration file.
 
-### 2. Render the PDF
+### 2. Update the configuration (optional)
+
+If files have been added or removed from your repository, refresh the file lists
+without re-running the full wizard:
+
+```bash
+src-book update
+```
+
+This re-scans the repository while preserving your settings:
+- Refreshes source files and authors from git
+- Keeps existing frontmatter, prompts for newly detected candidates
+- Handles missing entrypoints interactively
+
+### 3. Render the PDF
 
 ```bash
 src-book render
@@ -140,6 +156,84 @@ booklet_sheet_height_in = 8.5      # physical sheet height
 | `booklet_signature_size`  | `16`    | Pages per signature (must be divisible by 4)                   |
 | `booklet_sheet_width_in`  | `11.0`  | Physical sheet width (landscape US Letter)                     |
 | `booklet_sheet_height_in` | `8.5`   | Physical sheet height                                          |
+
+### Header and Footer Options
+
+Headers and footers can be customised with template strings containing placeholders:
+
+| Placeholder | Description                                                    |
+| ----------- | -------------------------------------------------------------- |
+| `{file}`    | Current file path                                              |
+| `{title}`   | Book title                                                     |
+| `{n}`       | Page number (formatted per section's numbering style)          |
+| `{total}`   | Section's total page count (formatted per section's style)     |
+
+| Option              | Default   | Description                                        |
+| ------------------- | --------- | -------------------------------------------------- |
+| `header_template`   | `{file}`  | Header text template (empty string disables)       |
+| `header_position`   | `Outer`   | Horizontal position (see below)                    |
+| `header_rule`       | `Below`   | Horizontal line: `None`, `Above`, or `Below`       |
+| `footer_template`   | `{n}`     | Footer text template (empty string disables)       |
+| `footer_position`   | `Outer`   | Horizontal position (see below)                    |
+| `footer_rule`       | `None`    | Horizontal line: `None`, `Above`, or `Below`       |
+
+Position options:
+
+- `Outer` - alternates left/right for binding (default: right on odd pages, left on even)
+- `Inner` - opposite of Outer (for headers/footers on the gutter side)
+- `Centre` - always centred
+- `Left` - always left-aligned
+- `Right` - always right-aligned
+
+Example configuration:
+
+```toml
+[pdf]
+header_template = "{title}"
+header_position = "Centre"
+header_rule = "Below"
+footer_template = "Page {n} of {total}"
+footer_position = "Outer"
+```
+
+### Section-Specific Page Numbering
+
+Each document section (frontmatter, source, appendix) can have its own page
+numbering style and starting number. This allows traditional book formatting
+where frontmatter uses Roman numerals and source code starts fresh at page 1.
+
+| Section                 | Default Style | Default Start |
+| ----------------------- | ------------- | ------------- |
+| `frontmatter_numbering` | `RomanLower`  | `1`           |
+| `source_numbering`      | `Arabic`      | `1`           |
+| `appendix_numbering`    | `Arabic`      | `1`           |
+
+Each section numbering is configured with:
+- `style`: `Arabic` (1, 2, 3), `RomanLower` (i, ii, iii), or `RomanUpper` (I, II, III)
+- `start`: starting page number for the section
+
+Example configuration:
+
+```toml
+[pdf.frontmatter_numbering]
+style = "RomanLower"
+start = 1
+
+[pdf.source_numbering]
+style = "Arabic"
+start = 1
+
+[pdf.appendix_numbering]
+style = "Arabic"
+start = 1
+```
+
+The `{n}` and `{total}` placeholders in header/footer templates automatically
+format according to each page's section, and the table of contents displays
+page numbers matching each entry's section style.
+
+**Note:** Legacy configs using `page_number_style` and `page_number_start` at
+the top level are still supported for backwards compatibility.
 
 ### Available Syntax Themes
 

@@ -4,7 +4,7 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::{header, ImagePathMap};
+use crate::sinks::pdf::rendering::ImagePathMap;
 use anyhow::Result;
 use chrono::TimeZone;
 use pdf_gen::layout::Margins;
@@ -40,8 +40,6 @@ pub fn render(
     )
     .with_gutter(In(0.25).into(), doc.page_order.len());
     let mut page = Page::new(config.page_size(), Some(margins));
-
-    header::render_header(config, doc, font_ids, &mut page, path.display())?;
 
     let image_size = if aspect_ratio >= 1.0 {
         let width = page.content_box.x2 - page.content_box.x1;

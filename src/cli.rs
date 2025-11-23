@@ -6,7 +6,7 @@ pub enum Commands {
     Config,
     /// Renders the book according to the contents of the src-book.toml config file
     Render,
-    /// Updates source_files and frontmatter in an existing src-book.toml
+    /// Refreshes file lists and authors without re-running the full config wizard
     Update,
 }
 

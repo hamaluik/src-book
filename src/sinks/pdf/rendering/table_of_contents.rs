@@ -12,8 +12,9 @@
 //! links point to correct page indices. Pages are padded to an even count for booklet
 //! alignment.
 
-use crate::sinks::pdf::config::PDF;
+use crate::sinks::pdf::config::{Section, PDF};
 use crate::sinks::pdf::fonts::FontIds;
+use crate::sinks::pdf::rendering::header_footer::format_page_number;
 use anyhow::Result;
 use owned_ttf_parser::AsFaceRef;
 use pdf_gen::id_arena_crate::Id;
@@ -110,6 +111,17 @@ struct FlatEntry {
     page: usize,
 }
 
+/// A TOC entry with section information for proper page number formatting.
+struct TocDisplayEntry {
+    text: String,
+    /// Absolute page index (relative to page_offset, used for link targets)
+    abs_page: usize,
+    /// Which section this entry belongs to
+    section: Section,
+    /// Page index within the section (0-indexed, used for display number)
+    page_in_section: usize,
+}
+
 /// Flattens the tree into a list of entries with tree-drawing prefixes.
 fn flatten_tree(root: &TocEntry) -> Vec<FlatEntry> {
     let mut result = Vec::new();
@@ -196,8 +208,15 @@ pub fn render(
         })
         .unwrap_or_else(|| (Pt(-2.0), Pt(0.5)));
 
-    // build entries list
-    let mut entries: Vec<(String, usize)> = Vec::new();
+    // build entries list with section information for proper page number formatting
+    let mut entries: Vec<TocDisplayEntry> = Vec::new();
+
+    // track frontmatter page count for calculating source section indices
+    let frontmatter_page_count = frontmatter_pages
+        .values()
+        .max()
+        .map(|&m| m + 1)
+        .unwrap_or(0);
 
     // add frontmatter section if there are frontmatter files
     if !frontmatter_pages.is_empty() {
@@ -206,7 +225,12 @@ pub fn render(
         frontmatter_entries.sort_by_key(|(_, page)| *page);
 
         if let Some((_, first_page)) = frontmatter_entries.first() {
-            entries.push(("Frontmatter".to_string(), *first_page));
+            entries.push(TocDisplayEntry {
+                text: "Frontmatter".to_string(),
+                abs_page: *first_page,
+                section: Section::Frontmatter,
+                page_in_section: *first_page,
+            });
         }
 
         for (path, page) in frontmatter_entries {
@@ -214,7 +238,12 @@ pub fn render(
                 .file_name()
                 .map(|n| n.to_string_lossy().to_string())
                 .unwrap_or_else(|| path.display().to_string());
-            entries.push((format!("  └── {}", name), page));
+            entries.push(TocDisplayEntry {
+                text: format!("  └── {}", name),
+                abs_page: page,
+                section: Section::Frontmatter,
+                page_in_section: page,
+            });
         }
     }
 
@@ -222,14 +251,35 @@ pub fn render(
     let tree = build_tree(source_pages);
     let flat_entries = flatten_tree(&tree);
 
-    entries.extend(
-        flat_entries
-            .into_iter()
-            .map(|e| (format!("{}{}", e.prefix, e.name), e.page)),
-    );
+    // calculate source section page count for appendix indices (before moving flat_entries)
+    let source_max_page = flat_entries.iter().map(|e| e.page).max().unwrap_or(0);
+    let source_page_count = if flat_entries.is_empty() {
+        0
+    } else {
+        source_max_page + 1 - frontmatter_page_count
+    };
+
+    entries.extend(flat_entries.into_iter().map(|e| {
+        // source pages are stored relative to page_offset, so page_in_section
+        // is the page number minus the frontmatter page count
+        let page_in_section = e.page.saturating_sub(frontmatter_page_count);
+        TocDisplayEntry {
+            text: format!("{}{}", e.prefix, e.name),
+            abs_page: e.page,
+            section: Section::Source,
+            page_in_section,
+        }
+    }));
 
     if let Some(git_history_page) = git_history_page {
-        entries.push(("Commit History".to_string(), git_history_page - skip_pages));
+        let abs_page = git_history_page - skip_pages;
+        let page_in_section = abs_page.saturating_sub(frontmatter_page_count + source_page_count);
+        entries.push(TocDisplayEntry {
+            text: "Commit History".to_string(),
+            abs_page,
+            section: Section::Appendix,
+            page_in_section,
+        });
     }
 
     // pre-calculate how many TOC pages we'll need so intradocument links are correct
@@ -293,11 +343,14 @@ pub fn render(
 
             let entry = entries.remove(0);
             let entry_width = layout::width_of_text(
-                &format!("{} ", entry.0),
+                &format!("{} ", entry.text),
                 &doc.fonts[font_ids.regular],
                 entry_size,
             );
-            let pagenum = format!("{}", entry.1 + 1); // page numbering is 0-indexed, add 1 to make it 1-indexed
+            // format page number using section-specific style
+            let numbering = config.numbering_for_section(entry.section);
+            let display_page_num = numbering.start + entry.page_in_section as i32;
+            let pagenum = format_page_number(display_page_num, numbering.style);
             let pagenum_width =
                 layout::width_of_text(&pagenum, &doc.fonts[font_ids.regular], entry_size);
 
@@ -320,7 +373,7 @@ pub fn render(
             page.add_content(underline);
 
             page.add_span(SpanLayout {
-                text: entry.0,
+                text: entry.text,
                 font: entry_font,
                 colour: colours::BLACK,
                 coords: (x, y),
@@ -339,7 +392,7 @@ pub fn render(
                     y1: y,
                     y2: y + doc.fonts[font_ids.regular].ascent(entry_size),
                 },
-                entry.1 + skip_pages + num_toc_pages,
+                entry.abs_page + skip_pages + num_toc_pages,
             );
 
             y -= height_entry;

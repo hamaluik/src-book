@@ -6,7 +6,7 @@
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::{header, hex_dump};
+use crate::sinks::pdf::rendering::hex_dump;
 use anyhow::{Context, Result};
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
@@ -16,6 +16,14 @@ use syntect::highlighting::FontStyle;
 use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
+/// Result of rendering a source file.
+pub struct RenderResult {
+    /// Page index of the first page, or None if the file was empty
+    pub first_page: Option<usize>,
+    /// Number of pages rendered
+    pub page_count: usize,
+}
+
 /// Render a source file with syntax highlighting.
 ///
 /// Text files are rendered with line numbers and syntax highlighting based on file
@@ -23,7 +31,7 @@ use syntect::util::LinesWithEndings;
 /// as hex dumps (when `config.render_binary_hex` is enabled) or shown as a grey
 /// placeholder.
 ///
-/// Returns the page index of the first page, or None if the file was empty.
+/// Returns the first page index and number of pages rendered.
 pub fn render(
     config: &PDF,
     doc: &mut Document,
@@ -31,7 +39,7 @@ pub fn render(
     path: &Path,
     ss: &SyntaxSet,
     theme: &syntect::highlighting::Theme,
-) -> Result<Option<usize>> {
+) -> Result<RenderResult> {
     let text_size = Pt(config.font_size_body_pt);
     let small_size = Pt(config.font_size_small_pt);
     let subheading_size = Pt(config.font_size_subheading_pt);
@@ -158,6 +166,7 @@ pub fn render(
         Pt(0.0)
     };
     let mut first_page = None;
+    let mut page_count = 0;
     while !text.is_empty() {
         let margins = Margins::trbl(
             In(0.25).into(),
@@ -191,13 +200,16 @@ pub fn render(
             break;
         }
 
-        header::render_header(config, doc, font_ids, &mut page, path.display())?;
         layout::layout_text_natural(doc, &mut page, start, &mut text, wrap_width, bbox);
         let page_id = doc.add_page(page);
+        page_count += 1;
         if first_page.is_none() {
             first_page = Some(doc.index_of_page(page_id).expect("page was just added"));
         }
     }
 
-    Ok(first_page)
+    Ok(RenderResult {
+        first_page,
+        page_count,
+    })
 }
