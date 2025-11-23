@@ -15,6 +15,7 @@ derive_builder = "0.20"
 syntect = "5.3"
 dialoguer = { version = "0.12", features = ["fuzzy-select"] }
 console = "0.16"
+indicatif = "0.17"
 anyhow = "1.0"
 log = "0.4"
 clap = { version = "4", features = ["derive", "cargo", "env", "unicode", "wrap_help"] }

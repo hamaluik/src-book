@@ -8,6 +8,9 @@
 //! The output is designed for duplex printing: print the PDF, fold the stack
 //! in half, and staple along the spine.
 //!
+//! Displays a progress bar during XObject creation since this can take time
+//! for large documents (one XObject per page).
+//!
 //! **Limitation**: Images are not currently supported in booklet output due to
 //! the way Form XObjects work. Only text content is rendered.
 
@@ -15,6 +18,7 @@ use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::{FontIds, LoadedFonts};
 use crate::sinks::pdf::imposition::{calculate_imposition, create_imposed_page, BookletConfig};
 use anyhow::{Context, Result};
+use indicatif::{ProgressBar, ProgressStyle};
 use pdf_gen::id_arena_crate::Id;
 use pdf_gen::*;
 use std::path::PathBuf;
@@ -61,6 +65,15 @@ pub fn render_booklet(
     // for now, images won't be rendered in the booklet (only text content)
 
     // create Form XObjects from each source page
+    let progress = ProgressBar::new(source_doc.page_order.len() as u64);
+    progress.set_style(
+        ProgressStyle::default_bar()
+            .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+            .expect("can parse progress style")
+            .progress_chars("#>-"),
+    );
+    progress.set_message("Creating booklet...");
+
     let mut page_xobjs: Vec<Id<FormXObject>> = Vec::new();
     for page_id in source_doc.page_order.iter() {
         let page = &source_doc.pages[*page_id];
@@ -108,7 +121,9 @@ pub fn render_booklet(
 
         let xobj_id = booklet_doc.add_form_xobject(xobj);
         page_xobjs.push(xobj_id);
+        progress.inc(1);
     }
+    progress.finish_with_message("Booklet created");
 
     // calculate imposition layout
     let total_pages = page_xobjs.len();

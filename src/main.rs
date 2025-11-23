@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use cli::Cli;
 use config_wizard::Configuration;
+use indicatif::{ProgressBar, ProgressStyle};
 use std::process::ExitCode;
 
 mod cli;
@@ -39,12 +40,23 @@ fn try_main() -> Result<()> {
             let Configuration { source, pdf } = config;
 
             if let Some(pdf) = pdf {
-                println!("Rendering PDF to {}...", pdf.outfile.display());
+                let total_files =
+                    source.frontmatter_files.len() + source.source_files.len();
+                let progress = ProgressBar::new(total_files as u64);
+                progress.set_style(
+                    ProgressStyle::default_bar()
+                        .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                        .expect("can parse progress style")
+                        .progress_chars("#>-"),
+                );
+                progress.set_message("Rendering PDF...");
+
                 let stats = pdf
-                    .render(&source)
+                    .render(&source, &progress)
                     .with_context(|| "Failed to render PDF")?;
 
-                println!("Done!\n");
+                progress.finish_with_message("Done!");
+                println!();
                 println!("  Main PDF:    {}", pdf.outfile.display());
 
                 if let (Some(booklet_path), Some(sheets)) =

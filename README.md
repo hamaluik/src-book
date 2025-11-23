@@ -20,6 +20,7 @@ formatted book with syntax highlighting, table of contents, and commit history.
 - Configurable page dimensions, margins, and fonts
 - Optional booklet PDF output for saddle-stitch binding
 - Entrypoint-aware file ordering for logical reading flow
+- Progress bar during rendering for large repositories
 
 ## Installation
 

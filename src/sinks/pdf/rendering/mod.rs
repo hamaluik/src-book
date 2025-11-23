@@ -6,6 +6,10 @@
 //!
 //! Frontmatter files (README, LICENSE, etc.) are rendered first with their own
 //! bookmark section, providing readers with project context before diving into code.
+//!
+//! The render function accepts a progress bar from the caller, updating it with the
+//! current file name and incrementing after each file is processed. This provides
+//! visual feedback during long renders of large repositories.
 
 mod commits;
 mod header;
@@ -20,6 +24,7 @@ use crate::sinks::pdf::config::{RenderStats, PDF};
 use crate::sinks::pdf::fonts::{FontIds, LoadedFonts};
 use crate::source::Source;
 use anyhow::{Context, Result};
+use indicatif::ProgressBar;
 use pdf_gen::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -31,7 +36,7 @@ use syntect::parsing::SyntaxSet;
 pub const PAGE_SIZE: (Pt, Pt) = (Pt(5.5 * 72.0), Pt(8.5 * 72.0));
 
 impl PDF {
-    pub fn render(&self, source: &Source) -> Result<RenderStats> {
+    pub fn render(&self, source: &Source, progress: &ProgressBar) -> Result<RenderStats> {
         // load fonts based on configuration
         let fonts = LoadedFonts::load(&self.font)
             .with_context(|| format!("Failed to load font '{}'", self.font))?;
@@ -89,6 +94,12 @@ impl PDF {
             frontmatter_bookmark.borrow_mut().bolded();
 
             for file in source.frontmatter_files.iter() {
+                let file_name = file
+                    .file_name()
+                    .map(|n| n.to_string_lossy().to_string())
+                    .unwrap_or_else(|| file.display().to_string());
+                progress.set_message(file_name.clone());
+
                 frontmatter_pages.insert(file.clone(), doc.page_order.len() - page_offset);
 
                 match file
@@ -131,6 +142,8 @@ impl PDF {
                         }
                     }
                 }
+
+                progress.inc(1);
             }
         }
 
@@ -143,6 +156,12 @@ impl PDF {
         let mut folder_bookmarks: HashMap<PathBuf, Rc<RefCell<OutlineEntry>>> = HashMap::new();
 
         for file in source.source_files.iter() {
+            let file_name = file
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| file.display().to_string());
+            progress.set_message(file_name);
+
             source_pages.insert(file.clone(), doc.page_order.len() - page_offset);
 
             // render an image or source file depending on its extension
@@ -195,6 +214,8 @@ impl PDF {
                     }
                 }
             }
+
+            progress.inc(1);
         }
 
         let commit_list = source
