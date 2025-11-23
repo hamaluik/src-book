@@ -3,6 +3,9 @@
 //! Walks a git repository to collect source files (respecting `.gitignore`) and extracts
 //! author information from commit history. Authors are ranked by commit count to determine
 //! prominence ordering on the title page.
+//!
+//! Supports optional submodule exclusion to prevent external dependency code from being
+//! included in the generated book. Submodules are detected via `git2::Repository::submodules()`.
 
 use crate::source::{Author, AuthorBuilder};
 use anyhow::{anyhow, Context, Result};
@@ -20,8 +23,16 @@ pub struct GitRepository {
 }
 
 impl GitRepository {
-    /// Load a git repository starting from the root folder
-    pub fn load<P: Into<PathBuf>>(root: P, block: Vec<GlobMatcher>) -> Result<GitRepository> {
+    /// Load a git repository starting from the root folder.
+    ///
+    /// When `exclude_submodules` is true, files within git submodule directories are
+    /// excluded from the source file list. This prevents external dependency code from
+    /// being included in the generated book.
+    pub fn load<P: Into<PathBuf>>(
+        root: P,
+        block: Vec<GlobMatcher>,
+        exclude_submodules: bool,
+    ) -> Result<GitRepository> {
         let root: PathBuf = root.into();
 
         // make sure the root is a path
@@ -46,6 +57,17 @@ impl GitRepository {
                 root.display()
             )
         })?;
+
+        // collect submodule paths if exclusion is enabled
+        let submodule_paths: Vec<PathBuf> = if exclude_submodules {
+            repo.submodules()
+                .unwrap_or_default()
+                .iter()
+                .map(|sm| PathBuf::from(sm.path()))
+                .collect()
+        } else {
+            Vec::new()
+        };
 
         // load the authors from commits
         let authors = {
@@ -123,6 +145,15 @@ impl GitRepository {
 
                 // match against relative path so globs like "Cargo.lock" work
                 let rel_path = entry.path().strip_prefix(&root).unwrap_or(entry.path());
+
+                // skip if path is inside a submodule directory
+                let in_submodule = submodule_paths
+                    .iter()
+                    .any(|sm_path| rel_path.starts_with(sm_path));
+                if in_submodule {
+                    continue;
+                }
+
                 let blocked = block.iter().any(|glob| glob.is_match(rel_path));
                 if !blocked {
                     push_path(entry.into_path())?;
@@ -140,6 +171,22 @@ impl GitRepository {
     }
 }
 
+impl GitRepository {
+    /// Returns the paths of all submodules in the repository, or an empty vec if none.
+    pub fn submodule_paths<P: Into<PathBuf>>(root: P) -> Vec<PathBuf> {
+        let root: PathBuf = root.into();
+        let Ok(repo) = git2::Repository::open(&root) else {
+            return Vec::new();
+        };
+
+        let submodules = repo.submodules().unwrap_or_default();
+        submodules
+            .iter()
+            .map(|sm| PathBuf::from(sm.path()))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use globset::Glob;
@@ -148,8 +195,12 @@ mod test {
 
     #[test]
     fn repository_adds_files() {
-        let repo = GitRepository::load(".", vec![Glob::new("*.lock").unwrap().compile_matcher()])
-            .expect("can load repository");
+        let repo = GitRepository::load(
+            ".",
+            vec![Glob::new("*.lock").unwrap().compile_matcher()],
+            true,
+        )
+        .expect("can load repository");
         assert_ne!(repo.source_files.len(), 0);
     }
 }

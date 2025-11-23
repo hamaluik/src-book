@@ -90,7 +90,27 @@ pub fn run() -> Result<()> {
         }
     }
 
-    let repo = GitRepository::load(&repo_path, block_globs)
+    // check for submodules and prompt if any exist
+    let submodule_paths = GitRepository::submodule_paths(&repo_path);
+    let exclude_submodules = if !submodule_paths.is_empty() {
+        println!(
+            "Detected {} git submodule(s): {}",
+            submodule_paths.len(),
+            submodule_paths
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
+        Confirm::with_theme(&theme)
+            .with_prompt("Exclude git submodules from the book?")
+            .default(true)
+            .interact()?
+    } else {
+        true // default to true even if no submodules, for consistency
+    };
+
+    let repo = GitRepository::load(&repo_path, block_globs, exclude_submodules)
         .with_context(|| format!("Failed to load git repository at {}", repo_path.display()))?;
 
     let mut authors = repo.authors.clone();
