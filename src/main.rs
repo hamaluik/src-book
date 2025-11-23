@@ -32,7 +32,7 @@ fn try_main() -> Result<()> {
     let cli = Cli::parse();
 
     match &cli.command {
-        cli::Commands::Config => config_wizard::run(),
+        cli::Commands::Config(args) => config_wizard::run(args),
         cli::Commands::Update => update::run(),
         cli::Commands::Render => {
             println!("Loading configuration...");

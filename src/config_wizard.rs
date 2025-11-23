@@ -1,15 +1,34 @@
-//! Interactive configuration wizard for creating `src-book.toml`.
+//! Configuration wizard for creating `src-book.toml`.
 //!
 //! The wizard collects book metadata, repository settings, frontmatter file selection,
-//! and PDF output options through a series of prompts. It extracts authors from git
-//! commit history and allows manual additions with prominence ranking.
+//! and PDF output options. It extracts authors from git commit history and allows manual
+//! additions with prominence ranking.
 //!
-//! Frontmatter files (README, LICENSE, etc.) are auto-detected and presented for
-//! selection. Selected files are rendered in their own section before source code.
+//! ## Modes
 //!
-//! Optional header/footer customisation allows template-based text with placeholders,
-//! configurable positions for binding-aware alternation, and choice of page number styles.
+//! - **Interactive (default)**: Prompts the user through a series of dialoguer prompts
+//! - **Non-interactive (`--yes`)**: Uses auto-detected values and sensible defaults
+//! - **Template-based (`--config-from`)**: Loads PDF settings from existing config file (implies `--yes`)
+//!
+//! ## Non-Interactive Mode
+//!
+//! Useful for CI pipelines and scripting. Auto-detection from [`crate::detection`] provides:
+//! - Title from directory name (title-cased)
+//! - Entrypoint from common conventions (`src/main.rs`, `src/lib.rs`, etc.)
+//! - Licences from manifest files or LICENSE text
+//! - Frontmatter from root-level documentation files
+//!
+//! When `--config-from` is used, the template's PDF settings (theme, page size, margins)
+//! are preserved while the repository is re-scanned for current files and authors.
+//!
+//! ## Caveats
+//!
+//! - Non-interactive mode always overwrites existing `src-book.toml` without prompting
+//! - Optional features (booklet, binary hex) are disabled in non-interactive mode unless
+//!   a template with those features enabled is provided via `--config-from`
+//! - Block globs require interactive mode or `--config-from` to specify
 
+use crate::cli::ConfigArgs;
 use crate::detection::{detect_defaults, detect_frontmatter, DetectedDefaults};
 use crate::file_ordering::{sort_paths, sort_with_entrypoint};
 use crate::sinks::{PageSize, Position, RulePosition, SyntaxTheme, PDF};
@@ -27,22 +46,56 @@ pub struct Configuration {
     pub pdf: Option<PDF>,
 }
 
-/// Run the interactive configuration wizard.
+/// Load a template configuration from an existing `src-book.toml` file.
 ///
-/// Prompts the user for book metadata, repository settings, and PDF output options,
-/// then writes `src-book.toml` to the current directory.
-pub fn run() -> Result<()> {
+/// Used by `--config-from` to apply a "golden" config's PDF settings to a new repository.
+/// The template's source file lists are ignored; only PDF settings are preserved.
+fn load_template(path: &PathBuf) -> Result<Configuration> {
+    let contents =
+        std::fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    toml::from_str(&contents).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+/// Run the configuration wizard.
+///
+/// # Arguments
+///
+/// * `args` - CLI arguments controlling wizard behaviour:
+///   - `yes`: Skip all prompts, use detected defaults
+///   - `config_from`: Load PDF settings from existing config file (implies `yes`)
+///   - `output`: Override PDF output path
+///
+/// # Non-Interactive Behaviour
+///
+/// When `args.yes` is true or `args.config_from` is provided, the wizard:
+/// - Uses detected title, entrypoint, licences, frontmatter, and authors
+/// - Applies sensible defaults for all PDF settings
+/// - Overwrites existing `src-book.toml` without confirmation
+///
+/// Priority for PDF settings: `--output` flag > template > detected defaults
+pub fn run(args: &ConfigArgs) -> Result<()> {
+    let non_interactive = args.yes || args.config_from.is_some();
+    let template = args
+        .config_from
+        .as_ref()
+        .map(load_template)
+        .transpose()?;
+
     let theme = ColorfulTheme {
         ..ColorfulTheme::default()
     };
 
     // get repo path first so we can detect defaults
-    let repo_path = Input::with_theme(&theme)
-        .with_prompt("Repository directory")
-        .default(".".to_string())
-        .interact()
-        .with_context(|| "Failed to obtain repository path")?;
-    let repo_path = PathBuf::from(repo_path);
+    let repo_path = if non_interactive {
+        PathBuf::from(".")
+    } else {
+        let path: String = Input::with_theme(&theme)
+            .with_prompt("Repository directory")
+            .default(".".to_string())
+            .interact()
+            .with_context(|| "Failed to obtain repository path")?;
+        PathBuf::from(path)
+    };
     if !repo_path.exists() || !repo_path.is_dir() {
         return Err(anyhow!("Path '{}' isn't a directory!", repo_path.display()));
     }
@@ -54,16 +107,41 @@ pub fn run() -> Result<()> {
         licenses: detected_licenses,
     } = detect_defaults(&repo_path);
 
-    let title: String = Input::with_theme(&theme)
-        .with_prompt("Book title")
-        .default(detected_title.unwrap_or_default())
-        .allow_empty(false)
-        .interact()
-        .with_context(|| "Failed to obtain title")?;
+    let title: String = if non_interactive {
+        // prefer template title, then detected, then directory name
+        template
+            .as_ref()
+            .and_then(|t| t.source.title.clone())
+            .or(detected_title)
+            .unwrap_or_else(|| {
+                repo_path
+                    .canonicalize()
+                    .ok()
+                    .and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
+                    .unwrap_or_else(|| "Untitled".to_string())
+            })
+    } else {
+        Input::with_theme(&theme)
+            .with_prompt("Book title")
+            .default(detected_title.unwrap_or_default())
+            .allow_empty(false)
+            .interact()
+            .with_context(|| "Failed to obtain title")?
+    };
     use globset::{Glob, GlobMatcher};
     let mut block_globs: Vec<GlobMatcher> = Vec::default();
 
-    if Confirm::with_theme(&theme)
+    // in non-interactive mode, use template's block globs if available
+    if non_interactive {
+        if let Some(ref t) = template {
+            for glob_str in &t.source.block_globs {
+                let glob = Glob::new(glob_str)
+                    .with_context(|| format!("failed to parse glob: {}", glob_str))?
+                    .compile_matcher();
+                block_globs.push(glob);
+            }
+        }
+    } else if Confirm::with_theme(&theme)
         .with_prompt("Do you wish to specifically block some files allowed by your .gitignore?")
         .interact()?
     {
@@ -95,7 +173,13 @@ pub fn run() -> Result<()> {
 
     // check for submodules and prompt if any exist
     let submodule_paths = GitRepository::submodule_paths(&repo_path);
-    let exclude_submodules = if !submodule_paths.is_empty() {
+    let exclude_submodules = if non_interactive {
+        // use template setting if available, otherwise default to true
+        template
+            .as_ref()
+            .map(|t| t.source.exclude_submodules)
+            .unwrap_or(true)
+    } else if !submodule_paths.is_empty() {
         println!(
             "Detected {} git submodule(s): {}",
             submodule_paths.len(),
@@ -118,55 +202,68 @@ pub fn run() -> Result<()> {
 
     let mut authors = repo.authors.clone();
 
-    println!(
-        "Authors: [{}]",
-        authors
-            .iter()
-            .map(|author| author.to_string())
-            .collect::<Vec<String>>()
-            .join("], [")
-    );
-    if Confirm::with_theme(&theme)
-        .with_prompt("Do you wish to add more authors?")
-        .interact()?
-    {
-        let mut author_i = 0;
-        'authors: loop {
-            let author: String = Input::with_theme(&theme)
-                .with_prompt("Additional author (leave blank to move on)")
-                .allow_empty(true)
-                .interact()?;
-            if author.trim().is_empty() {
-                break 'authors;
+    // in non-interactive mode, skip adding extra authors
+    if !non_interactive {
+        println!(
+            "Authors: [{}]",
+            authors
+                .iter()
+                .map(|author| author.to_string())
+                .collect::<Vec<String>>()
+                .join("], [")
+        );
+        if Confirm::with_theme(&theme)
+            .with_prompt("Do you wish to add more authors?")
+            .interact()?
+        {
+            let mut author_i = 0;
+            'authors: loop {
+                let author: String = Input::with_theme(&theme)
+                    .with_prompt("Additional author (leave blank to move on)")
+                    .allow_empty(true)
+                    .interact()?;
+                if author.trim().is_empty() {
+                    break 'authors;
+                }
+                authors.push(
+                    AuthorBuilder::default()
+                        .identifier(author)
+                        .prominence(usize::MAX - author_i)
+                        .build()
+                        .with_context(|| "Failed to build author")?,
+                );
+                author_i += 1;
             }
-            authors.push(
-                AuthorBuilder::default()
-                    .identifier(author)
-                    .prominence(usize::MAX - author_i)
-                    .build()
-                    .with_context(|| "Failed to build author")?,
-            );
-            author_i += 1;
         }
     }
     authors.sort();
 
-    // pre-populate with detected licenses
-    let mut licenses: Vec<String> = detected_licenses;
-    'licenses: loop {
-        if !licenses.is_empty() {
-            println!("Licences: [{}]", licenses.join("], ["));
-        }
-        let license: String = Input::with_theme(&theme)
-            .with_prompt("SPDX licence of the repository (leave empty for done)")
-            .allow_empty(true)
-            .interact()?;
-        if license.trim().is_empty() {
-            break 'licenses;
-        }
+    // pre-populate with detected licenses (or template licenses in non-interactive mode)
+    let licenses: Vec<String> = if non_interactive {
+        // prefer template licences if available, otherwise use detected
+        template
+            .as_ref()
+            .map(|t| t.source.licenses.clone())
+            .filter(|l| !l.is_empty())
+            .unwrap_or(detected_licenses)
+    } else {
+        let mut licenses = detected_licenses;
+        'licenses: loop {
+            if !licenses.is_empty() {
+                println!("Licences: [{}]", licenses.join("], ["));
+            }
+            let license: String = Input::with_theme(&theme)
+                .with_prompt("SPDX licence of the repository (leave empty for done)")
+                .allow_empty(true)
+                .interact()?;
+            if license.trim().is_empty() {
+                break 'licenses;
+            }
 
-        licenses.push(license.trim().to_string());
-    }
+            licenses.push(license.trim().to_string());
+        }
+        licenses
+    };
 
     let mut source_files: Vec<PathBuf> = repo
         .source_files
@@ -177,7 +274,12 @@ pub fn run() -> Result<()> {
 
     // detect and select frontmatter files
     let detected_frontmatter = detect_frontmatter(&source_files);
-    let frontmatter_files = if !detected_frontmatter.is_empty() {
+    let frontmatter_files = if non_interactive {
+        // in non-interactive mode, select all detected frontmatter files
+        let selected = detected_frontmatter.clone();
+        source_files.retain(|f| !selected.contains(f));
+        selected
+    } else if !detected_frontmatter.is_empty() {
         let frontmatter_strings: Vec<String> = detected_frontmatter
             .iter()
             .map(|p| p.display().to_string())
@@ -210,8 +312,10 @@ pub fn run() -> Result<()> {
     };
 
     // ask for entrypoint file to control ordering
-    // default to yes if we detected an entrypoint
-    let entrypoint = if Confirm::with_theme(&theme)
+    // in non-interactive mode, use detected entrypoint if available
+    let entrypoint = if non_interactive {
+        detected_entrypoint
+    } else if Confirm::with_theme(&theme)
         .with_prompt(
             "Do you want to specify an entrypoint file (e.g., src/main.rs) to control file ordering?",
         )
@@ -251,14 +355,22 @@ pub fn run() -> Result<()> {
     sort_with_entrypoint(&mut source_files, entrypoint.as_ref());
 
     // ask about commit history ordering
-    let commit_order_options: Vec<String> =
-        CommitOrder::all().iter().map(|o| o.to_string()).collect();
-    let commit_order_idx = FuzzySelect::with_theme(&theme)
-        .with_prompt("Commit history order")
-        .items(&commit_order_options)
-        .default(0)
-        .interact()?;
-    let commit_order = CommitOrder::all()[commit_order_idx];
+    let commit_order = if non_interactive {
+        // use template setting if available, otherwise default to NewestFirst
+        template
+            .as_ref()
+            .map(|t| t.source.commit_order)
+            .unwrap_or(CommitOrder::NewestFirst)
+    } else {
+        let commit_order_options: Vec<String> =
+            CommitOrder::all().iter().map(|o| o.to_string()).collect();
+        let commit_order_idx = FuzzySelect::with_theme(&theme)
+            .with_prompt("Commit history order")
+            .items(&commit_order_options)
+            .default(0)
+            .interact()?;
+        CommitOrder::all()[commit_order_idx]
+    };
 
     // convert GlobMatchers to strings for serialisation
     let block_glob_strings: Vec<String> = block_globs
@@ -279,57 +391,97 @@ pub fn run() -> Result<()> {
         commit_order,
     };
 
+    // in non-interactive mode, always enable PDF output
+    // use --output flag, template, or default to "book.pdf"
+    let should_render_pdf = if non_interactive {
+        true
+    } else {
+        Confirm::with_theme(&theme)
+            .with_prompt("Do you want to render to PDF?")
+            .interact()?
+    };
+
     let mut pdf = None;
-    if Confirm::with_theme(&theme)
-        .with_prompt("Do you want to render to PDF?")
-        .interact()?
-    {
-        let outfile: String = Input::with_theme(&theme)
-            .with_prompt("Output pdf file")
-            .allow_empty(false)
-            .interact()?;
-        let mut outfile = PathBuf::from(outfile);
-        let ext = outfile
-            .extension()
-            .map(std::ffi::OsStr::to_ascii_lowercase)
-            .unwrap_or_default();
-        if ext != *"pdf" {
-            outfile.set_extension("pdf");
-        }
-
-        let syntax_theme = FuzzySelect::with_theme(&theme)
-            .with_prompt("Syntax highlighting theme")
-            .items(SyntaxTheme::all())
-            .default(0)
-            .interact()?;
-        let syntax_theme = SyntaxTheme::all()[syntax_theme];
-
-        let page_size_idx = FuzzySelect::with_theme(&theme)
-            .with_prompt("Page size")
-            .items(PageSize::all())
-            .default(0)
-            .interact()?;
-        let page_size = PageSize::all()[page_size_idx];
-
-        let (page_width_in, page_height_in) = if let Some(dims) = page_size.dimensions_in() {
-            dims
+    if should_render_pdf {
+        let outfile = if non_interactive {
+            // priority: --output flag > template > default
+            args.output
+                .clone()
+                .or_else(|| template.as_ref().and_then(|t| t.pdf.as_ref()).map(|p| p.outfile.clone()))
+                .unwrap_or_else(|| PathBuf::from("book.pdf"))
         } else {
-            // custom dimensions
-            let width: f32 = Input::with_theme(&theme)
-                .with_prompt("Page width in inches")
-                .default(5.5)
+            let outfile_str: String = Input::with_theme(&theme)
+                .with_prompt("Output pdf file")
+                .allow_empty(false)
                 .interact()?;
-            let height: f32 = Input::with_theme(&theme)
-                .with_prompt("Page height in inches")
-                .default(8.5)
-                .interact()?;
-            (width, height)
+            let mut outfile = PathBuf::from(outfile_str);
+            let ext = outfile
+                .extension()
+                .map(std::ffi::OsStr::to_ascii_lowercase)
+                .unwrap_or_default();
+            if ext != *"pdf" {
+                outfile.set_extension("pdf");
+            }
+            outfile
         };
 
-        let base_font_size: f32 = Input::with_theme(&theme)
-            .with_prompt("Base font size in points")
-            .default(8.0)
-            .interact()?;
+        let syntax_theme = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .map(|p| p.theme)
+                .unwrap_or(SyntaxTheme::all()[0])
+        } else {
+            let idx = FuzzySelect::with_theme(&theme)
+                .with_prompt("Syntax highlighting theme")
+                .items(SyntaxTheme::all())
+                .default(0)
+                .interact()?;
+            SyntaxTheme::all()[idx]
+        };
+
+        let (page_width_in, page_height_in) = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .map(|p| (p.page_width_in, p.page_height_in))
+                .unwrap_or((5.5, 8.5)) // Half Letter default
+        } else {
+            let page_size_idx = FuzzySelect::with_theme(&theme)
+                .with_prompt("Page size")
+                .items(PageSize::all())
+                .default(0)
+                .interact()?;
+            let page_size = PageSize::all()[page_size_idx];
+
+            if let Some(dims) = page_size.dimensions_in() {
+                dims
+            } else {
+                // custom dimensions
+                let width: f32 = Input::with_theme(&theme)
+                    .with_prompt("Page width in inches")
+                    .default(5.5)
+                    .interact()?;
+                let height: f32 = Input::with_theme(&theme)
+                    .with_prompt("Page height in inches")
+                    .default(8.5)
+                    .interact()?;
+                (width, height)
+            }
+        };
+
+        let base_font_size: f32 = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .map(|p| p.font_size_body_pt)
+                .unwrap_or(8.0)
+        } else {
+            Input::with_theme(&theme)
+                .with_prompt("Base font size in points")
+                .default(8.0)
+                .interact()?
+        };
 
         // calculate derived font sizes from base, rounded to integers
         let font_size_title_pt = (base_font_size * 3.2).round();
@@ -339,7 +491,13 @@ pub fn run() -> Result<()> {
         let font_size_small_pt = (base_font_size * 0.8).round();
 
         // ask about booklet generation
-        let booklet_outfile = if Confirm::with_theme(&theme)
+        // in non-interactive mode, skip booklet unless template has it configured
+        let booklet_outfile = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .and_then(|p| p.booklet_outfile.clone())
+        } else if Confirm::with_theme(&theme)
             .with_prompt("Generate a print-ready booklet PDF for saddle-stitch binding?")
             .default(false)
             .interact()?
@@ -354,7 +512,14 @@ pub fn run() -> Result<()> {
         };
 
         let (booklet_signature_size, booklet_sheet_width_in, booklet_sheet_height_in) =
-            if booklet_outfile.is_some() {
+            if non_interactive {
+                // use template settings if available
+                template
+                    .as_ref()
+                    .and_then(|t| t.pdf.as_ref())
+                    .map(|p| (p.booklet_signature_size, p.booklet_sheet_width_in, p.booklet_sheet_height_in))
+                    .unwrap_or((16, 11.0, 8.5))
+            } else if booklet_outfile.is_some() {
                 let sig_size: u32 = Input::with_theme(&theme)
                     .with_prompt("Pages per signature (must be divisible by 4)")
                     .default(16)
@@ -387,18 +552,34 @@ pub fn run() -> Result<()> {
             };
 
         // ask about binary hex rendering
-        let render_binary_hex = Confirm::with_theme(&theme)
-            .with_prompt("Render binary files as hex dumps instead of placeholders?")
-            .default(false)
-            .interact()?;
+        // in non-interactive mode, skip hex rendering unless template has it enabled
+        let render_binary_hex = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .map(|p| p.render_binary_hex)
+                .unwrap_or(false)
+        } else {
+            let enabled = Confirm::with_theme(&theme)
+                .with_prompt("Render binary files as hex dumps instead of placeholders?")
+                .default(false)
+                .interact()?;
 
-        if render_binary_hex {
-            println!(
-                "Warning: Rendering binary files as hex will drastically increase book size and rendering time."
-            );
-        }
+            if enabled {
+                println!(
+                    "Warning: Rendering binary files as hex will drastically increase book size and rendering time."
+                );
+            }
+            enabled
+        };
 
-        let (binary_hex_max_bytes, font_size_hex_pt) = if render_binary_hex {
+        let (binary_hex_max_bytes, font_size_hex_pt) = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .map(|p| (p.binary_hex_max_bytes, p.font_size_hex_pt))
+                .unwrap_or((Some(65536), 5.0))
+        } else if render_binary_hex {
             let max_kb: u32 = Input::with_theme(&theme)
                 .with_prompt("Maximum KB to include from binary files (0 for unlimited)")
                 .default(64)
@@ -420,6 +601,7 @@ pub fn run() -> Result<()> {
         };
 
         // header/footer customisation
+        // in non-interactive mode, use template settings or defaults
         let (
             header_template,
             header_position,
@@ -427,7 +609,27 @@ pub fn run() -> Result<()> {
             footer_template,
             footer_position,
             footer_rule,
-        ) = if Confirm::with_theme(&theme)
+        ) = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .map(|p| (
+                    p.header_template.clone(),
+                    p.header_position,
+                    p.header_rule,
+                    p.footer_template.clone(),
+                    p.footer_position,
+                    p.footer_rule,
+                ))
+                .unwrap_or_else(|| (
+                    "{file}".to_string(),
+                    Position::Outer,
+                    RulePosition::Below,
+                    "{n}".to_string(),
+                    Position::Outer,
+                    RulePosition::None,
+                ))
+        } else if Confirm::with_theme(&theme)
             .with_prompt("Customise headers and footers?")
             .default(false)
             .interact()?
@@ -516,7 +718,14 @@ pub fn run() -> Result<()> {
         };
 
         // colophon/statistics page customisation
-        let colophon_template = if Confirm::with_theme(&theme)
+        // in non-interactive mode, enable colophon with default template (or use template's setting)
+        let colophon_template = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .map(|p| p.colophon_template.clone())
+                .unwrap_or_else(crate::sinks::default_colophon_template)
+        } else if Confirm::with_theme(&theme)
             .with_prompt("Include a colophon/statistics page after the title page?")
             .default(true)
             .interact()?
@@ -593,21 +802,33 @@ pub fn run() -> Result<()> {
 
     let config = Configuration { source, pdf };
 
-    let config = toml::to_string_pretty(&config)
+    let config_str = toml::to_string_pretty(&config)
         .with_context(|| "Failed to convert configuration to TOML")?;
 
     let config_path = PathBuf::from("src-book.toml");
-    if config_path.exists()
-        && !Confirm::with_theme(&theme)
+
+    // in non-interactive mode, always overwrite
+    let should_write = if non_interactive {
+        true
+    } else if config_path.exists() {
+        Confirm::with_theme(&theme)
             .with_prompt("src-book.toml already exists, do you want to override it?")
             .interact()?
-    {
-        println!("Configuration:");
-        println!("{}", config);
     } else {
-        std::fs::write("src-book.toml", config)
+        true
+    };
+
+    if should_write {
+        std::fs::write("src-book.toml", &config_str)
             .with_context(|| "Failed to write configuration file")?;
-        println!("src-book.toml written!");
+        if non_interactive {
+            println!("src-book.toml written (non-interactive mode)");
+        } else {
+            println!("src-book.toml written!");
+        }
+    } else {
+        println!("Configuration:");
+        println!("{}", config_str);
     }
 
     Ok(())
