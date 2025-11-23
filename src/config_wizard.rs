@@ -10,6 +10,18 @@
 //! - **Non-interactive (`--yes`)**: Uses auto-detected values and sensible defaults
 //! - **Template-based (`--config-from`)**: Loads PDF settings from existing config file (implies `--yes`)
 //!
+//! ## Theme Preview
+//!
+//! In interactive mode, selecting a syntax highlighting theme displays a live preview
+//! of the theme rendered in the terminal using 24-bit ANSI colours. The preview shows
+//! a short Rust code snippet on a white background (simulating paper) so users can see
+//! how their code will appear before confirming their choice. After viewing the preview,
+//! users can confirm or go back to select a different theme.
+//!
+//! Theme preview requires a terminal with true colour (24-bit) support. Most modern
+//! terminals support this, including macOS Terminal, iTerm2, Windows Terminal, and
+//! common Linux terminal emulators.
+//!
 //! ## Non-Interactive Mode
 //!
 //! Useful for CI pipelines and scripting. Auto-detection from [`crate::detection`] provides:
@@ -27,6 +39,7 @@
 //! - Optional features (booklet, binary hex) are disabled in non-interactive mode unless
 //!   a template with those features enabled is provided via `--config-from`
 //! - Block globs require interactive mode or `--config-from` to specify
+//! - Theme preview is skipped in non-interactive mode
 
 use crate::cli::ConfigArgs;
 use crate::detection::{detect_defaults, detect_frontmatter, DetectedDefaults};
@@ -38,6 +51,9 @@ use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Confirm, FuzzySelect, Input, MultiSelect};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
 
 /// Complete configuration for a src-book project.
 #[derive(Deserialize, Serialize)]
@@ -54,6 +70,66 @@ fn load_template(path: &PathBuf) -> Result<Configuration> {
     let contents =
         std::fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
     toml::from_str(&contents).with_context(|| format!("failed to parse {}", path.display()))
+}
+
+/// Print a syntax-highlighted preview of the given theme to the terminal.
+///
+/// Uses 24-bit ANSI colour codes for true colour display. The preview shows a short
+/// Rust snippet demonstrating keywords, strings, comments, and function calls.
+/// Background is set to white to simulate appearance on paper, rendered as a
+/// full rectangle with padding.
+fn print_theme_preview(theme: SyntaxTheme, ss: &SyntaxSet, ts: &ThemeSet) {
+    let sample = r#"fn main() {
+    let message = "Hello, world!";
+    println!("{}", message); // output
+}"#;
+
+    let syntax = ss
+        .find_syntax_by_extension("rs")
+        .expect("can find rust syntax");
+    let theme = &ts.themes[theme.name()];
+
+    // ANSI escape for white background (24-bit colour)
+    const WHITE_BG: &str = "\x1b[48;2;255;255;255m";
+    const RESET: &str = "\x1b[0m";
+    const PADDING: usize = 2;
+
+    // calculate the width needed for the rectangle
+    let max_line_len = sample.lines().map(|l| l.len()).max().unwrap_or(0);
+    let box_width = max_line_len + PADDING * 2;
+
+    println!();
+
+    // top padding row
+    println!("{WHITE_BG}{:box_width$}{RESET}", "");
+
+    let mut h = HighlightLines::new(syntax, theme);
+    for line in sample.lines() {
+        // add newline for syntect's highlighter state tracking
+        let line_with_newline = format!("{}\n", line);
+        let ranges = h
+            .highlight_line(&line_with_newline, ss)
+            .expect("can highlight line");
+
+        // build highlighted string without the trailing newline
+        let mut escaped = String::new();
+        for (style, text) in ranges {
+            let text = text.trim_end_matches('\n');
+            if !text.is_empty() {
+                let fg = style.foreground;
+                escaped.push_str(&format!("\x1b[38;2;{};{};{}m{}", fg.r, fg.g, fg.b, text));
+            }
+        }
+
+        // calculate right padding to fill the rectangle
+        let right_pad = max_line_len - line.len() + PADDING;
+
+        // left padding + highlighted content + right padding (all on white bg)
+        println!("{WHITE_BG}{:PADDING$}{escaped}{:right_pad$}{RESET}", "", "");
+    }
+
+    // bottom padding row
+    println!("{WHITE_BG}{:box_width$}{RESET}", "");
 }
 
 /// Run the configuration wizard.
@@ -432,12 +508,39 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
                 .map(|p| p.theme)
                 .unwrap_or(SyntaxTheme::all()[0])
         } else {
-            let idx = FuzzySelect::with_theme(&theme)
-                .with_prompt("Syntax highlighting theme")
-                .items(SyntaxTheme::all())
-                .default(0)
-                .interact()?;
-            SyntaxTheme::all()[idx]
+            // load syntax and theme sets for preview
+            let (ss, _): (SyntaxSet, _) = bincode::serde::decode_from_slice(
+                crate::highlight::SERIALIZED_SYNTAX,
+                bincode::config::standard(),
+            )
+            .expect("can deserialize syntaxes");
+            let (ts, _): (ThemeSet, _) = bincode::serde::decode_from_slice(
+                crate::highlight::SERIALIZED_THEMES,
+                bincode::config::standard(),
+            )
+            .expect("can deserialize themes");
+
+            // preview-then-confirm loop
+            let mut default_idx = 0;
+            loop {
+                let idx = FuzzySelect::with_theme(&theme)
+                    .with_prompt("Syntax highlighting theme")
+                    .items(SyntaxTheme::all())
+                    .default(default_idx)
+                    .interact()?;
+                let selected = SyntaxTheme::all()[idx];
+
+                print_theme_preview(selected, &ss, &ts);
+
+                if Confirm::with_theme(&theme)
+                    .with_prompt(format!("Use {}?", selected))
+                    .default(true)
+                    .interact()?
+                {
+                    break selected;
+                }
+                default_idx = idx;
+            }
         };
 
         let (page_width_in, page_height_in) = if non_interactive {
