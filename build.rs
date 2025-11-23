@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use std::{fs::File, io::BufReader, path::PathBuf};
 use syntect::highlighting::ThemeSet;
+use syntect::parsing::SyntaxSet;
 
 fn load_theme<P: Into<PathBuf>>(themes: &mut ThemeSet, path: P) -> Result<()> {
     let path: PathBuf = path.into();
@@ -21,11 +22,18 @@ fn load_theme<P: Into<PathBuf>>(themes: &mut ThemeSet, path: P) -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    let themebin_path = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/themes.bin"));
-    if themebin_path.exists() {
-        return Ok(());
-    }
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR is set"));
 
+    // generate syntaxes.bin from syntect's defaults
+    let syntax_path = out_dir.join("syntaxes.bin");
+    let ss = SyntaxSet::load_defaults_newlines();
+    let syntax_bytes = bincode::serde::encode_to_vec(&ss, bincode::config::standard())
+        .with_context(|| "Failed to serialize syntaxset to bincode")?;
+    std::fs::write(&syntax_path, syntax_bytes)
+        .with_context(|| "Failed to write serialized syntaxes")?;
+
+    // generate themes.bin from bundled theme files
+    let themes_path = out_dir.join("themes.bin");
     let mut themes = ThemeSet::new();
     load_theme(
         &mut themes,
@@ -56,10 +64,10 @@ fn main() -> Result<()> {
         ),
     )?;
 
-    let themes = bincode::serde::encode_to_vec(&themes, bincode::config::standard())
+    let themes_bytes = bincode::serde::encode_to_vec(&themes, bincode::config::standard())
         .with_context(|| "Failed to serialize themeset to bincode")?;
-    std::fs::write(themebin_path, themes)
-        .with_context(|| "Failed to write serialized themese to bincode")?;
+    std::fs::write(&themes_path, themes_bytes)
+        .with_context(|| "Failed to write serialized themes")?;
 
     Ok(())
 }

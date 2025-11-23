@@ -1,60 +1,173 @@
 [source]
-title = 'Src Book'
-repository = '.'
-entrypoint = 'src/main.rs'
-commit_order = 'OldestFirst'
-licenses = ['Apache-2.0']
+title = "Src Book"
+repository = "."
+entrypoint = "src/main.rs"
+commit_order = "OldestFirst"
+licenses = ["Apache-2.0"]
 frontmatter_files = [
-    'README.md',
-    'Cargo.toml',
-    'LICENSE',
+    "README.md",
+    "Cargo.toml",
+    "LICENSE",
 ]
 source_files = [
-    'src/main.rs',
-    'src/cli.rs',
-    'src/config_wizard.rs',
-    'src/detection.rs',
-    'src/file_ordering.rs',
-    'src/highlight.rs',
-    'src/source/author.rs',
-    'src/source/commit.rs',
-    'src/source/mod.rs',
-    'src/sinks/pdf/booklet.rs',
-    'src/sinks/pdf/config.rs',
-    'src/sinks/pdf/fonts.rs',
-    'src/sinks/pdf/imposition.rs',
-    'src/sinks/pdf/mod.rs',
-    'src/source/providers/git_repository.rs',
-    'src/source/providers/mod.rs',
-    'src/sinks/pdf/rendering/commits.rs',
-    'src/sinks/pdf/rendering/header.rs',
-    'src/sinks/pdf/rendering/hex_dump.rs',
-    'src/sinks/pdf/rendering/images.rs',
-    'src/sinks/pdf/rendering/mod.rs',
-    'src/sinks/pdf/rendering/source_file.rs',
-    'src/sinks/pdf/rendering/table_of_contents.rs',
-    'src/sinks/pdf/rendering/title_page.rs',
-    'build.rs',
-    'assets/syntaxes.bin',
-    'assets/themes.bin',
-    'assets/fonts/FiraMono-Bold.ttf',
-    'assets/fonts/FiraMono-Regular.ttf',
-    'assets/fonts/SourceCodePro-Bold.ttf',
-    'assets/fonts/SourceCodePro-BoldIt.ttf',
-    'assets/fonts/SourceCodePro-It.ttf',
-    'assets/fonts/SourceCodePro-Regular.ttf',
+    "src/main.rs",
+    "src/cli.rs",
+    "src/config_wizard.rs",
+    "src/detection.rs",
+    "src/file_ordering.rs",
+    "src/highlight.rs",
+    "src/source/author.rs",
+    "src/source/commit.rs",
+    "src/source/mod.rs",
+    "src/sinks/pdf/booklet.rs",
+    "src/sinks/pdf/config.rs",
+    "src/sinks/pdf/fonts.rs",
+    "src/sinks/pdf/imposition.rs",
+    "src/sinks/pdf/mod.rs",
+    "src/source/providers/git_repository.rs",
+    "src/source/providers/mod.rs",
+    "src/sinks/pdf/rendering/commits.rs",
+    "src/sinks/pdf/rendering/header.rs",
+    "src/sinks/pdf/rendering/hex_dump.rs",
+    "src/sinks/pdf/rendering/images.rs",
+    "src/sinks/pdf/rendering/mod.rs",
+    "src/sinks/pdf/rendering/source_file.rs",
+    "src/sinks/pdf/rendering/table_of_contents.rs",
+    "src/sinks/pdf/rendering/title_page.rs",
+    "build.rs",
+    "assets/fonts/FiraMono-Bold.ttf",
+    "assets/fonts/FiraMono-Regular.ttf",
+    "assets/fonts/SourceCodePro-Bold.ttf",
+    "assets/fonts/SourceCodePro-BoldIt.ttf",
+    "assets/fonts/SourceCodePro-It.ttf",
+    "assets/fonts/SourceCodePro-Regular.ttf",
+    "assets/themes/Solarized/LICENSE",
+    "assets/themes/Solarized/README.mkd",
+    "assets/themes/Solarized/Solarized (dark).tmTheme",
+    "assets/themes/Solarized/Solarized (light).tmTheme",
+    "assets/themes/Solarized/colors.md",
+    "assets/themes/Solarized/solarized.png",
+    "assets/themes/github-sublime-theme/GitHub.tmTheme",
+    "assets/themes/github-sublime-theme/README.md",
+    "assets/themes/github-sublime-theme/screenshot.png",
+    "assets/themes/gruvbox-tmTheme/LICENSE",
+    "assets/themes/gruvbox-tmTheme/README.md",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Dark) (Hard) NDC.tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Dark) (Hard).tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Dark) (Medium) NDC.tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Dark) (Medium).tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Dark) (Soft) NDC.tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Dark) (Soft).tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Light) (Hard) NDC.tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Light) (Hard).tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Light) (Medium) NDC.tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Light) (Medium).tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Light) (Soft) NDC.tmTheme",
+    "assets/themes/gruvbox-tmTheme/gruvbox (Light) (Soft).tmTheme",
+    "assets/themes/onehalf/LICENSE.txt",
+    "assets/themes/onehalf/README.md",
+    "assets/themes/Solarized/samples/README.md",
+    "assets/themes/Solarized/samples/test.c",
+    "assets/themes/Solarized/samples/test.coffee",
+    "assets/themes/Solarized/samples/test.html",
+    "assets/themes/Solarized/samples/test.js",
+    "assets/themes/Solarized/samples/test.md",
+    "assets/themes/Solarized/samples/test.py",
+    "assets/themes/Solarized/samples/test.rb",
+    "assets/themes/onehalf/alacritty/README.md",
+    "assets/themes/onehalf/fluentterminal/OneHalfDark.flutecolors",
+    "assets/themes/onehalf/fluentterminal/OneHalfLight.flutecolors",
+    "assets/themes/onehalf/fluentterminal/README.md",
+    "assets/themes/onehalf/gnome-terminal/README.md",
+    "assets/themes/onehalf/gnome-terminal/onehalfdark.sh",
+    "assets/themes/onehalf/gnome-terminal/onehalflight.sh",
+    "assets/themes/onehalf/iterm/OneHalfDark.itermcolors",
+    "assets/themes/onehalf/iterm/OneHalfLight.itermcolors",
+    "assets/themes/onehalf/kitty/README.md",
+    "assets/themes/onehalf/kitty/onehalf-dark.conf",
+    "assets/themes/onehalf/kitty/onehalf-light.conf",
+    "assets/themes/onehalf/konsole/README.md",
+    "assets/themes/onehalf/konsole/onehalf-dark.colorscheme",
+    "assets/themes/onehalf/konsole/onehalf-light.colorscheme",
+    "assets/themes/onehalf/mintty/README.md",
+    "assets/themes/onehalf/mintty/onehalfdark",
+    "assets/themes/onehalf/mintty/onehalflight",
+    "assets/themes/onehalf/putty/README.md",
+    "assets/themes/onehalf/putty/onehalf-dark.reg",
+    "assets/themes/onehalf/putty/onehalf-light.reg",
+    "assets/themes/onehalf/screenshots/dark.png",
+    "assets/themes/onehalf/screenshots/desktop_dark.png",
+    "assets/themes/onehalf/screenshots/desktop_light.png",
+    "assets/themes/onehalf/screenshots/fluentterminal.png",
+    "assets/themes/onehalf/screenshots/fluentterminal_dark.png",
+    "assets/themes/onehalf/screenshots/fluentterminal_light.png",
+    "assets/themes/onehalf/screenshots/iterm.png",
+    "assets/themes/onehalf/screenshots/iterm_dark.png",
+    "assets/themes/onehalf/screenshots/iterm_light.png",
+    "assets/themes/onehalf/screenshots/light.png",
+    "assets/themes/onehalf/screenshots/mintty_dark.png",
+    "assets/themes/onehalf/screenshots/mintty_light.png",
+    "assets/themes/onehalf/screenshots/sublimetext.png",
+    "assets/themes/onehalf/screenshots/sublimetext_dark.png",
+    "assets/themes/onehalf/screenshots/sublimetext_light.png",
+    "assets/themes/onehalf/screenshots/vim.png",
+    "assets/themes/onehalf/screenshots/vim_dark.png",
+    "assets/themes/onehalf/screenshots/vim_light.png",
+    "assets/themes/onehalf/screenshots/windowsterminal.png",
+    "assets/themes/onehalf/screenshots/windowsterminal_dark.png",
+    "assets/themes/onehalf/screenshots/windowsterminal_light.png",
+    "assets/themes/onehalf/screenshots/xcode_dark.png",
+    "assets/themes/onehalf/screenshots/xcode_light.png",
+    "assets/themes/onehalf/sublimetext/OneHalfDark.tmTheme",
+    "assets/themes/onehalf/sublimetext/OneHalfLight.tmTheme",
+    "assets/themes/onehalf/sublimetext/README.md",
+    "assets/themes/onehalf/terminal/OneHalfDark.terminal",
+    "assets/themes/onehalf/terminal/OneHalfLight.terminal",
+    "assets/themes/onehalf/vim/README.md",
+    "assets/themes/onehalf/vim/truecolors.png",
+    "assets/themes/onehalf/vscode/OneHalfDark.tmTheme",
+    "assets/themes/onehalf/vscode/OneHalfLight.tmTheme",
+    "assets/themes/onehalf/vscode/README.md",
+    "assets/themes/onehalf/windowsterminal/OneHalf.json",
+    "assets/themes/onehalf/windowsterminal/OneHalfDark.json",
+    "assets/themes/onehalf/windowsterminal/OneHalfLight.json",
+    "assets/themes/onehalf/windowsterminal/README.md",
+    "assets/themes/onehalf/xcode/OneHalfDark.dvtcolortheme",
+    "assets/themes/onehalf/xcode/OneHalfLight.dvtcolortheme",
+    "assets/themes/onehalf/xcode/README.md",
+    "assets/themes/onehalf/xfce4-terminal/OneHalfDark.theme",
+    "assets/themes/onehalf/xfce4-terminal/OneHalfLight.theme",
+    "assets/themes/onehalf/xfce4-terminal/README.md",
+    "assets/themes/onehalf/vim/colors/onehalfdark.vim",
+    "assets/themes/onehalf/vim/colors/onehalflight.vim",
+    "assets/themes/onehalf/vscode/onehalf-dark/README.md",
+    "assets/themes/onehalf/vscode/onehalf-dark/package.json",
+    "assets/themes/onehalf/vscode/onehalf-light/README.md",
+    "assets/themes/onehalf/vscode/onehalf-light/package.json",
+    "assets/themes/onehalf/vscode/screenshots/vscode-onehalf-dark.png",
+    "assets/themes/onehalf/vscode/screenshots/vscode-onehalf-light.png",
+    "assets/themes/onehalf/vscode/screenshots/vscode.png",
+    "assets/themes/onehalf/vscode/onehalf-dark/themes/OneHalfDark.tmTheme",
+    "assets/themes/onehalf/vscode/onehalf-dark/themes/onehalf-dark-color-theme.json",
+    "assets/themes/onehalf/vscode/onehalf-light/themes/OneHalfLight.tmTheme",
+    "assets/themes/onehalf/vscode/onehalf-light/themes/onehalf-light-color-theme.json",
+    "assets/themes/onehalf/wal/colorschemes/dark/one-half-dark.json",
+    "assets/themes/onehalf/wal/colorschemes/light/one-half-light.json",
+    "assets/themes/onehalf/vim/autoload/airline/themes/onehalfdark.vim",
+    "assets/themes/onehalf/vim/autoload/airline/themes/onehalflight.vim",
+    "assets/themes/onehalf/vim/autoload/lightline/colorscheme/onehalfdark.vim",
 ]
 
 [[source.authors]]
 user_names = []
-name = 'Kenton Hamaluik'
-email = 'kenton@hamaluik.ca'
-prominence = 27
+name = "Kenton Hamaluik"
+email = "kenton@hamaluik.ca"
+prominence = 30
 
 [pdf]
-font = 'SourceCodePro'
-theme = 'gruvbox (Light) (Hard)'
-outfile = 'src-book.pdf'
+font = "SourceCodePro"
+theme = "gruvbox (Light) (Hard)"
+outfile = "src-book.pdf"
 page_width_in = 5.5
 page_height_in = 8.5
 margin_top_in = 0.5
@@ -66,10 +179,9 @@ font_size_heading_pt = 19.0
 font_size_subheading_pt = 10.0
 font_size_body_pt = 8.0
 font_size_small_pt = 6.0
-booklet_outfile = 'src-book-booklet.pdf'
 booklet_signature_size = 16
 booklet_sheet_width_in = 11.0
 booklet_sheet_height_in = 8.5
-render_binary_hex = true
+render_binary_hex = false
 binary_hex_max_bytes = 65536
 font_size_hex_pt = 5.0
