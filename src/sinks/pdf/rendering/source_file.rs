@@ -1,12 +1,12 @@
 //! Source file rendering with syntax highlighting.
 //!
 //! Renders source code files with line numbers, syntax highlighting based on file
-//! extension, and natural text wrapping. Binary files display a placeholder instead
-//! of attempting to render invalid UTF-8 content.
+//! extension, and natural text wrapping. Binary files can be rendered as hex dumps
+//! (when enabled) or display a placeholder.
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
-use crate::sinks::pdf::rendering::{header, PAGE_SIZE};
+use crate::sinks::pdf::rendering::{header, hex_dump, PAGE_SIZE};
 use anyhow::{Context, Result};
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
@@ -17,6 +17,11 @@ use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
 /// Render a source file with syntax highlighting.
+///
+/// Text files are rendered with line numbers and syntax highlighting based on file
+/// extension. Binary files (detected by UTF-8 decode failure) are either rendered
+/// as hex dumps (when `config.render_binary_hex` is enabled) or shown as a grey
+/// placeholder.
 ///
 /// Returns the page index of the first page, or None if the file was empty.
 pub fn render(
@@ -31,11 +36,28 @@ pub fn render(
     let small_size = Pt(config.font_size_small_pt);
     let subheading_size = Pt(config.font_size_subheading_pt);
 
-    // read the contents, or use placeholder for binary files
+    // read the contents, or handle binary files
     let (contents, is_binary) = match std::fs::read_to_string(path) {
         Ok(contents) => (contents.replace("    ", "  "), false),
         Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
-            // binary file - use placeholder
+            // binary file - check if we should render as hex
+            if config.render_binary_hex {
+                let data = std::fs::read(path)
+                    .with_context(|| format!("Failed to read binary file {}", path.display()))?;
+
+                let max_bytes = config.binary_hex_max_bytes.unwrap_or(usize::MAX);
+                let truncated = data.len() > max_bytes;
+                let data = if truncated {
+                    &data[..max_bytes]
+                } else {
+                    &data[..]
+                };
+
+                return Ok(hex_dump::render(
+                    config, doc, font_ids, path, data, truncated, theme,
+                ));
+            }
+            // fallback to placeholder
             ("<binary data>".to_string(), true)
         }
         Err(e) => {

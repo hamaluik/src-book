@@ -87,6 +87,18 @@ pub struct PDF {
     /// Physical sheet height in inches for booklet printing (default 8.5 for US Letter landscape)
     #[serde(default = "default_booklet_sheet_height")]
     pub booklet_sheet_height_in: f32,
+    /// Render binary files as coloured hex dumps instead of placeholders (default false).
+    /// Warning: This dramatically increases PDF size and rendering time.
+    #[serde(default)]
+    pub render_binary_hex: bool,
+    /// Maximum bytes per binary file before truncating (default 64KB, None for unlimited).
+    /// Limits PDF bloat from large binaries while still showing representative content.
+    #[serde(default = "default_binary_hex_max_bytes")]
+    pub binary_hex_max_bytes: Option<usize>,
+    /// Font size for hex dump text in points (default 5.0).
+    /// Smaller than body text to fit more content; 5pt is near the legibility limit.
+    #[serde(default = "default_font_size_hex")]
+    pub font_size_hex_pt: f32,
 }
 
 fn default_font_size_title() -> f32 {
@@ -113,6 +125,12 @@ fn default_booklet_sheet_width() -> f32 {
 fn default_booklet_sheet_height() -> f32 {
     8.5
 }
+fn default_binary_hex_max_bytes() -> Option<usize> {
+    Some(65536)
+}
+fn default_font_size_hex() -> f32 {
+    5.0
+}
 
 impl Default for PDF {
     fn default() -> Self {
@@ -135,6 +153,9 @@ impl Default for PDF {
             booklet_signature_size: default_booklet_signature_size(),
             booklet_sheet_width_in: default_booklet_sheet_width(),
             booklet_sheet_height_in: default_booklet_sheet_height(),
+            render_binary_hex: false,
+            binary_hex_max_bytes: default_binary_hex_max_bytes(),
+            font_size_hex_pt: default_font_size_hex(),
         }
     }
 }

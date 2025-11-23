@@ -333,6 +333,39 @@ pub fn run() -> Result<()> {
                 (16, 11.0, 8.5)
             };
 
+        // ask about binary hex rendering
+        let render_binary_hex = Confirm::with_theme(&theme)
+            .with_prompt("Render binary files as hex dumps instead of placeholders?")
+            .default(false)
+            .interact()?;
+
+        if render_binary_hex {
+            println!(
+                "Warning: Rendering binary files as hex will drastically increase book size and rendering time."
+            );
+        }
+
+        let (binary_hex_max_bytes, font_size_hex_pt) = if render_binary_hex {
+            let max_kb: u32 = Input::with_theme(&theme)
+                .with_prompt("Maximum KB to include from binary files (0 for unlimited)")
+                .default(64)
+                .interact()?;
+            let max_bytes = if max_kb == 0 {
+                None
+            } else {
+                Some(max_kb as usize * 1024)
+            };
+
+            let hex_font_size: f32 = Input::with_theme(&theme)
+                .with_prompt("Font size for hex dump in points")
+                .default(5.0)
+                .interact()?;
+
+            (max_bytes, hex_font_size)
+        } else {
+            (Some(65536), 5.0)
+        };
+
         pdf = Some(PDF {
             outfile,
             theme: syntax_theme,
@@ -345,6 +378,9 @@ pub fn run() -> Result<()> {
             booklet_signature_size,
             booklet_sheet_width_in,
             booklet_sheet_height_in,
+            render_binary_hex,
+            binary_hex_max_bytes,
+            font_size_hex_pt,
             ..PDF::default()
         });
     }

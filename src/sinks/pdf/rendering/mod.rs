@@ -9,6 +9,7 @@
 
 mod commits;
 mod header;
+mod hex_dump;
 mod images;
 mod source_file;
 mod table_of_contents;
