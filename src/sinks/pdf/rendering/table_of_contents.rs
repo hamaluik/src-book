@@ -2,9 +2,15 @@
 //!
 //! Generates a TOC listing frontmatter files, source files, and commit history
 //! with page numbers. Each entry links to its corresponding page within the document.
+//! Supports automatic pagination when entries exceed a single page.
 //!
 //! Frontmatter appears as a flat list under its own heading before the hierarchical
 //! source code tree structure.
+//!
+//! The TOC is rendered after all content pages but inserted before them in the final
+//! document. This requires pre-calculating the number of TOC pages so intradocument
+//! links point to correct page indices. Pages are padded to an even count for booklet
+//! alignment.
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
@@ -172,13 +178,6 @@ pub fn render(
         size: entry_size,
     };
 
-    // TODO: deal with when we have more than 1 toc page!
-    // probably have to pre-calculate how many toc pages we're going to generate
-    let mut num_toc_pages = 1;
-    if num_toc_pages % 2 == 1 {
-        num_toc_pages += 1;
-    }
-
     // figure out the underline
     let (underline_offset, underline_thickness) = doc.fonts[font_ids.regular]
         .face
@@ -229,6 +228,36 @@ pub fn render(
     if let Some(git_history_page) = git_history_page {
         entries.push(("Commit History".to_string(), git_history_page - skip_pages));
     }
+
+    // pre-calculate how many TOC pages we'll need so intradocument links are correct
+    let num_toc_pages = {
+        // create a temporary page to calculate layout metrics
+        let temp_page = Page::new(PAGE_SIZE, Some(Margins::all(In(0.5))));
+        let (_, start_y_first) =
+            layout::baseline_start(&temp_page, &doc.fonts[font_ids.bold], contents_size);
+        let (_, start_y_subsequent) =
+            layout::baseline_start(&temp_page, &doc.fonts[font_ids.regular], entry_size);
+        let bottom_y = temp_page.content_box.y1 + descent_entry;
+
+        // first page: starts after "Contents" heading
+        let first_page_usable = start_y_first - height_contents - bottom_y;
+        let entries_first_page = (first_page_usable / height_entry).floor() as usize;
+
+        // subsequent pages: full height available
+        let subsequent_page_usable = start_y_subsequent - bottom_y;
+        let entries_per_subsequent = (subsequent_page_usable / height_entry).floor() as usize;
+
+        // calculate total pages needed
+        let entries_after_first = entries.len().saturating_sub(entries_first_page);
+        let additional_pages = entries_after_first.div_ceil(entries_per_subsequent.max(1));
+        let mut count = 1 + additional_pages;
+
+        // pad to even for booklet alignment
+        if count % 2 == 1 {
+            count += 1;
+        }
+        count
+    };
 
     let mut pages: Vec<Page> = Vec::default();
     while !entries.is_empty() {
