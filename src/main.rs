@@ -11,7 +11,9 @@ mod file_ordering;
 mod highlight;
 mod sinks {
     mod pdf;
-    pub use pdf::{PageSize, Position, RulePosition, SyntaxTheme, PDF};
+    pub use pdf::{
+        default_colophon_template, PageSize, Position, RulePosition, SyntaxTheme, PDF,
+    };
 }
 mod source;
 mod update;

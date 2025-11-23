@@ -20,6 +20,7 @@
 //! headers and footers are applied via [`header_footer::render_headers_and_footers()`],
 //! which uses this metadata to populate template placeholders like `{file}`.
 
+mod colophon;
 mod commits;
 mod header_footer;
 mod hex_dump;
@@ -92,11 +93,23 @@ impl PDF {
 
         title_page::render(self, &mut doc, &font_ids, source)
             .with_context(|| "Failed to render title page")?;
-        // add a blank page after the title page so we start on the right
-        doc.add_page(Page::new(self.page_size(), None));
+
+        // render colophon if enabled (before the blank page)
+        let commits_for_stats = source.commits().unwrap_or_default();
+        let colophon_stats = colophon::compute_stats(source, &commits_for_stats);
+        let colophon_page_count = colophon::render(self, &mut doc, &font_ids, source, &colophon_stats)
+            .with_context(|| "Failed to render colophon page")?;
+
+        // add a blank page after title/colophon so we start on the right (if odd page count)
+        let pages_so_far = 1 + colophon_page_count; // title + colophon
+        if pages_so_far % 2 == 1 {
+            doc.add_page(Page::new(self.page_size(), None));
+        }
 
         doc.add_bookmark(None, "Title", 0).borrow_mut().bolded();
-        doc.add_bookmark(None, "Table of Contents", 2)
+        // TOC bookmark index: title (1) + colophon pages + blank page (if added)
+        let toc_bookmark_index = doc.page_order.len();
+        doc.add_bookmark(None, "Table of Contents", toc_bookmark_index)
             .borrow_mut()
             .italicized();
 

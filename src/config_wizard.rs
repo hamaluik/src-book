@@ -515,6 +515,54 @@ pub fn run() -> Result<()> {
             )
         };
 
+        // colophon/statistics page customisation
+        let colophon_template = if Confirm::with_theme(&theme)
+            .with_prompt("Include a colophon/statistics page after the title page?")
+            .default(true)
+            .interact()?
+        {
+            if Confirm::with_theme(&theme)
+                .with_prompt("Customise the colophon template?")
+                .default(false)
+                .interact()?
+            {
+                println!("Available placeholders:");
+                println!("  {{title}}         - Book title");
+                println!("  {{authors}}       - Author list");
+                println!("  {{licences}}      - Licence identifiers");
+                println!("  {{remotes}}       - Git remotes (name: url)");
+                println!("  {{generated_date}} - Current date");
+                println!("  {{tool_version}}  - src-book version");
+                println!("  {{file_count}}    - Number of source files");
+                println!("  {{line_count}}    - Total lines of code");
+                println!("  {{total_bytes}}   - Total file size");
+                println!("  {{commit_count}}  - Number of commits");
+                println!("  {{date_range}}    - First to last commit date");
+                println!("  {{language_stats}} - File/line counts by extension");
+                println!("  {{commit_chart}}  - Commit activity histogram");
+
+                let default_template = crate::sinks::default_colophon_template();
+                println!("\nDefault template:");
+                println!("---");
+                println!("{}", default_template);
+                println!("---");
+
+                let custom: String = Input::with_theme(&theme)
+                    .with_prompt("Enter custom template (or press Enter for default)")
+                    .default(default_template)
+                    .allow_empty(true)
+                    .interact()?;
+
+                custom
+            } else {
+                // use default template
+                crate::sinks::default_colophon_template()
+            }
+        } else {
+            // disabled
+            String::new()
+        };
+
         pdf = Some(PDF {
             outfile,
             theme: syntax_theme,
@@ -538,6 +586,7 @@ pub fn run() -> Result<()> {
             footer_template,
             footer_position,
             footer_rule,
+            colophon_template,
             ..PDF::default()
         });
     }

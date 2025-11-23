@@ -318,6 +318,14 @@ pub struct PDF {
     #[serde(default)]
     pub footer_rule: RulePosition,
 
+    /// Colophon/statistics page template with placeholders.
+    /// Placeholders: {title}, {authors}, {licences}, {remotes}, {generated_date},
+    /// {tool_version}, {file_count}, {line_count}, {total_bytes}, {language_stats},
+    /// {commit_count}, {date_range}, {commit_chart}
+    /// Empty string disables the colophon page.
+    #[serde(default = "default_colophon_template")]
+    pub colophon_template: String,
+
     // Section-specific page numbering
     /// Page numbering for frontmatter section (default: Roman lowercase, start 1)
     #[serde(default = "default_frontmatter_numbering")]
@@ -385,6 +393,36 @@ fn default_page_number_start() -> i32 {
 fn default_frontmatter_numbering() -> SectionNumbering {
     SectionNumbering::roman_lower()
 }
+pub fn default_colophon_template() -> String {
+    r#"{title}
+
+by {authors}
+
+{remotes}
+
+─────────────────────────────
+
+Generated on {generated_date}
+by src-book v{tool_version}
+
+{licences}
+
+─────────────────────────────
+
+Statistics
+
+  {file_count} source files
+  {line_count} lines of code
+  {total_bytes}
+  {commit_count} commits ({date_range})
+
+{language_stats}
+
+Commit Activity
+
+{commit_chart}"#
+        .to_string()
+}
 
 impl Default for PDF {
     fn default() -> Self {
@@ -416,6 +454,7 @@ impl Default for PDF {
             footer_template: default_footer_template(),
             footer_position: Position::default(),
             footer_rule: RulePosition::default(),
+            colophon_template: default_colophon_template(),
             frontmatter_numbering: default_frontmatter_numbering(),
             source_numbering: SectionNumbering::default(),
             appendix_numbering: SectionNumbering::default(),
