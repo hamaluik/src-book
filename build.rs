@@ -63,6 +63,20 @@ fn main() -> Result<()> {
             "/assets/themes/github-sublime-theme/GitHub.tmTheme"
         ),
     )?;
+    load_theme(
+        &mut themes,
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/themes/rose-pine/dist/rose-pine-dawn.tmTheme"
+        ),
+    )?;
+    load_theme(
+        &mut themes,
+        concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/assets/themes/catppuccin/Catppuccin Latte.tmTheme"
+        ),
+    )?;
 
     let themes_bytes = bincode::serde::encode_to_vec(&themes, bincode::config::standard())
         .with_context(|| "Failed to serialize themeset to bincode")?;

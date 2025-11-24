@@ -10,3 +10,9 @@
 [submodule "assets/themes/github-sublime-theme"]
 	path = assets/themes/github-sublime-theme
 	url = git@github.com:AlexanderEkdahl/github-sublime-theme.git
+[submodule "assets/themes/rose-pine"]
+	path = assets/themes/rose-pine
+	url = https://github.com/rose-pine/tm-theme.git
+[submodule "assets/themes/catppuccin"]
+	path = assets/themes/catppuccin
+	url = https://github.com/SchweGELBin/catppuccin-bat-sub.git

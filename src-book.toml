@@ -17,6 +17,7 @@ source_files = [
     "src/config_wizard.rs",
     "src/detection.rs",
     "src/file_ordering.rs",
+    "src/formatting.rs",
     "src/highlight.rs",
     "src/update.rs",
     "src/source/author.rs",
@@ -61,19 +62,19 @@ source_files = [
 user_names = []
 name = "Kenton Hamaluik"
 email = "kenton@hamaluik.ca"
-prominence = 43
+prominence = 45
 
 [pdf]
 outfile = "src-book.pdf"
 font = "SourceCodePro"
-theme = "Solarized (light)"
+theme = "Catppuccin Latte"
 
 [pdf.page]
 width_in = 5.5
 height_in = 8.5
 
 [pdf.margins]
-top_in = 0.5
+top_in = 0.25
 bottom_in = 0.25
 inner_in = 0.25
 outer_in = 0.125
@@ -82,8 +83,8 @@ outer_in = 0.125
 title_pt = 26.0
 heading_pt = 19.0
 subheading_pt = 10.0
-body_pt = 8.0
-small_pt = 6.0
+body_pt = 6.0
+small_pt = 5.0
 
 [pdf.header]
 template = "{file}"
@@ -93,7 +94,7 @@ rule = "Below"
 [pdf.footer]
 template = "{n}"
 position = "Outer"
-rule = "None"
+rule = "Above"
 
 [pdf.title_page]
 template = """
@@ -175,7 +176,7 @@ start = 1
 
 [epub]
 outfile = "src-book.epub"
-theme = "Solarized (light)"
+theme = "Catppuccin Latte"
 
 [epub.cover]
 template = """
@@ -183,9 +184,7 @@ template = """
 
 - by -
 
-{authors}
-
-{licences}"""
+{authors}"""
 image = ""
 
 [epub.colophon]
@@ -196,14 +195,14 @@ by {authors}
 
 {remotes}
 
-─────────────────────────────
+---
 
 Generated on {generated_date}
 by src-book v{tool_version}
 
 {licences}
 
-─────────────────────────────
+---
 
 Statistics
 
@@ -219,8 +218,8 @@ Commit Activity
 {commit_chart}"""
 
 [epub.metadata]
-subject = "Source code book"
-keywords = "rust,cli,source code"
+subject = ""
+keywords = ""
 language = "en"
 
 [epub.fonts]

@@ -155,6 +155,10 @@ pub enum SyntaxTheme {
     Gruvbox,
     #[serde(rename = "GitHub")]
     GitHub,
+    #[serde(rename = "Rosé Pine Dawn")]
+    RosePineDawn,
+    #[serde(rename = "Catppuccin Latte")]
+    CatppuccinLatte,
 }
 
 impl fmt::Display for SyntaxTheme {
@@ -170,6 +174,8 @@ impl SyntaxTheme {
             SyntaxTheme::OneHalfLight => "OneHalfLight",
             SyntaxTheme::Gruvbox => "gruvbox (Light) (Hard)",
             SyntaxTheme::GitHub => "GitHub",
+            SyntaxTheme::RosePineDawn => "Rosé Pine Dawn",
+            SyntaxTheme::CatppuccinLatte => "Catppuccin Latte",
         }
     }
 
@@ -179,6 +185,8 @@ impl SyntaxTheme {
             SyntaxTheme::OneHalfLight,
             SyntaxTheme::Gruvbox,
             SyntaxTheme::GitHub,
+            SyntaxTheme::RosePineDawn,
+            SyntaxTheme::CatppuccinLatte,
         ]
     }
 }
