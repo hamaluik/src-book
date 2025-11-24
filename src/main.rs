@@ -1,3 +1,14 @@
+//! src-book: Convert source code repositories into printable books.
+//!
+//! This CLI tool generates PDF and/or EPUB books from git repositories with
+//! syntax-highlighted source code, table of contents, and commit history.
+//!
+//! ## Commands
+//!
+//! - `config`: Create or update `src-book.toml` configuration file
+//! - `update`: Refresh file lists and authors without changing other settings
+//! - `render`: Generate configured output formats (PDF, EPUB, or both)
+
 use anyhow::{Context, Result};
 use cli::Cli;
 use config_wizard::Configuration;
@@ -8,15 +19,18 @@ mod cli;
 mod config_wizard;
 mod detection;
 mod file_ordering;
+mod formatting;
 mod highlight;
 mod sinks {
-    mod pdf;
+    pub mod pdf;
+    pub mod epub;
     pub use pdf::{
         default_colophon_template, default_title_page_template, BinaryHexConfig, BookletConfig,
         ColophonConfig, FontSizesConfig, FooterConfig, HeaderConfig, MarginsConfig, MetadataConfig,
         NumberingConfig, PageConfig, PageSize, Position, RulePosition, SyntaxTheme, TitlePageConfig,
         TitlePageImagePosition, PDF,
     };
+    pub use epub::EPUB;
 }
 mod source;
 mod update;
@@ -50,7 +64,7 @@ fn try_main() -> Result<()> {
                 pdf.apply_legacy_fields();
             }
 
-            let Configuration { source, pdf } = config;
+            let Configuration { source, pdf, epub } = config;
 
             if let Some(pdf) = pdf {
                 let total_files = source.frontmatter_files.len() + source.source_files.len();
@@ -108,6 +122,30 @@ fn try_main() -> Result<()> {
                 }
             } else {
                 println!("No PDF output configured.");
+            }
+
+            // render EPUB if configured
+            if let Some(epub) = epub {
+                let total_files = source.frontmatter_files.len() + source.source_files.len();
+                let progress = ProgressBar::new(total_files as u64);
+                progress.set_style(
+                    ProgressStyle::default_bar()
+                        .template("{spinner:.green} [{bar:40.cyan/blue}] {pos}/{len} {msg}")
+                        .expect("can parse progress style")
+                        .progress_chars("#>-"),
+                );
+                progress.set_message("Rendering EPUB...");
+
+                let stats = epub
+                    .render(&source, &progress)
+                    .with_context(|| "Failed to render EPUB")?;
+
+                println!();
+                println!(
+                    "  EPUB:        {} ({} documents)",
+                    epub.outfile.display(),
+                    stats.document_count
+                );
             }
 
             Ok(())

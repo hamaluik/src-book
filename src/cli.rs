@@ -16,7 +16,7 @@ pub struct ConfigArgs {
     #[arg(short = 'y', long)]
     pub yes: bool,
 
-    /// Use PDF settings from existing config file (re-scans repo for files/authors)
+    /// Use output settings from existing config file (re-scans repo for files/authors)
     #[arg(long, value_name = "FILE")]
     pub config_from: Option<PathBuf>,
 

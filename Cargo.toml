@@ -28,6 +28,9 @@ serde_json = "1"
 byte-unit = "5"
 chrono = "0.4"
 bincode = { version = "2", features = ["serde"] }
+epub-builder = "0.7"
+html-escape = "0.2"
+eyre = "0.6"
 
 [build-dependencies]
 syntect = "5.3"

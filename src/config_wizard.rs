@@ -1,14 +1,14 @@
 //! Configuration wizard for creating `src-book.toml`.
 //!
 //! The wizard collects book metadata, repository settings, frontmatter file selection,
-//! and PDF output options. It extracts authors from git commit history and allows manual
-//! additions with prominence ranking.
+//! and output format options (PDF, EPUB, or both). It extracts authors from git commit
+//! history and allows manual additions with prominence ranking.
 //!
 //! ## Modes
 //!
 //! - **Interactive (default)**: Prompts the user through a series of dialoguer prompts
 //! - **Non-interactive (`--yes`)**: Uses auto-detected values and sensible defaults
-//! - **Template-based (`--config-from`)**: Loads PDF settings from existing config file (implies `--yes`)
+//! - **Template-based (`--config-from`)**: Loads settings from existing config file (implies `--yes`)
 //!
 //! ## Theme Preview
 //!
@@ -30,14 +30,14 @@
 //! - Licences from manifest files or LICENSE text
 //! - Frontmatter from root-level documentation files
 //!
-//! When `--config-from` is used, the template's PDF settings (theme, page size, margins)
-//! are preserved while the repository is re-scanned for current files and authors.
+//! When `--config-from` is used, the template's PDF and EPUB settings are preserved
+//! while the repository is re-scanned for current files and authors.
 //!
 //! ## Caveats
 //!
 //! - Non-interactive mode always overwrites existing `src-book.toml` without prompting
-//! - Optional features (booklet, binary hex) are disabled in non-interactive mode unless
-//!   a template with those features enabled is provided via `--config-from`
+//! - PDF is always enabled in non-interactive mode; EPUB requires a template
+//! - Optional PDF features (booklet, binary hex) are disabled unless template provides them
 //! - Block globs require interactive mode or `--config-from` to specify
 //! - Theme preview is skipped in non-interactive mode
 
@@ -64,6 +64,7 @@ use syntect::parsing::SyntaxSet;
 pub struct Configuration {
     pub source: Source,
     pub pdf: Option<PDF>,
+    pub epub: Option<crate::sinks::EPUB>,
 }
 
 /// Load a template configuration from an existing `src-book.toml` file.
@@ -1289,7 +1290,69 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
         });
     }
 
-    let config = Configuration { source, pdf };
+    // EPUB configuration
+    let existing_epub = existing.as_ref().and_then(|e| e.epub.as_ref());
+    let should_render_epub = if non_interactive {
+        // in non-interactive mode, disable EPUB by default unless template has it
+        template
+            .as_ref()
+            .and_then(|t| t.epub.as_ref())
+            .is_some()
+    } else {
+        Confirm::with_theme(&theme)
+            .with_prompt("Do you want to render to EPUB?")
+            .default(existing_epub.is_some())
+            .interact()?
+    };
+
+    let mut epub = None;
+    if should_render_epub {
+        let epub_outfile = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.epub.as_ref())
+                .map(|e| e.outfile.clone())
+                .unwrap_or_else(|| PathBuf::from("book.epub"))
+        } else {
+            let default_outfile = existing_epub
+                .map(|e| e.outfile.display().to_string())
+                .unwrap_or_else(|| "book.epub".to_string());
+            let outfile_str: String = Input::with_theme(&theme)
+                .with_prompt("Output EPUB file")
+                .default(default_outfile)
+                .allow_empty(false)
+                .interact()?;
+            let mut outfile = PathBuf::from(outfile_str);
+            let ext = outfile
+                .extension()
+                .map(std::ffi::OsStr::to_ascii_lowercase)
+                .unwrap_or_default();
+            if ext != *"epub" {
+                outfile.set_extension("epub");
+            }
+            outfile
+        };
+
+        // use same theme as PDF if configured, otherwise use default
+        let epub_theme = pdf
+            .as_ref()
+            .map(|p| p.theme)
+            .or_else(|| {
+                template
+                    .as_ref()
+                    .and_then(|t| t.epub.as_ref())
+                    .map(|e| e.theme)
+            })
+            .unwrap_or(SyntaxTheme::all()[0]);
+
+        epub = Some(crate::sinks::EPUB {
+            outfile: epub_outfile,
+            theme: epub_theme,
+            ..Default::default()
+        });
+    }
+
+    let config = Configuration { source, pdf, epub };
 
     let config_str = toml::to_string_pretty(&config)
         .with_context(|| "Failed to convert configuration to TOML")?;

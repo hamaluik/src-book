@@ -22,6 +22,9 @@ source_files = [
     "src/source/author.rs",
     "src/source/commit.rs",
     "src/source/mod.rs",
+    "src/sinks/epub/config.rs",
+    "src/sinks/epub/mod.rs",
+    "src/sinks/epub/styles.rs",
     "src/sinks/pdf/booklet.rs",
     "src/sinks/pdf/config.rs",
     "src/sinks/pdf/fonts.rs",
@@ -29,6 +32,12 @@ source_files = [
     "src/sinks/pdf/mod.rs",
     "src/source/providers/git_repository.rs",
     "src/source/providers/mod.rs",
+    "src/sinks/epub/rendering/colophon.rs",
+    "src/sinks/epub/rendering/commits.rs",
+    "src/sinks/epub/rendering/cover.rs",
+    "src/sinks/epub/rendering/mod.rs",
+    "src/sinks/epub/rendering/source_file.rs",
+    "src/sinks/epub/rendering/toc.rs",
     "src/sinks/pdf/rendering/colophon.rs",
     "src/sinks/pdf/rendering/commits.rs",
     "src/sinks/pdf/rendering/header_footer.rs",
@@ -52,7 +61,7 @@ source_files = [
 user_names = []
 name = "Kenton Hamaluik"
 email = "kenton@hamaluik.ca"
-prominence = 41
+prominence = 43
 
 [pdf]
 outfile = "src-book.pdf"
@@ -163,3 +172,57 @@ start = 1
 [pdf.numbering.appendix]
 style = "Arabic"
 start = 1
+
+[epub]
+outfile = "src-book.epub"
+theme = "Solarized (light)"
+
+[epub.cover]
+template = """
+{title}
+
+- by -
+
+{authors}
+
+{licences}"""
+image = ""
+
+[epub.colophon]
+template = """
+{title}
+
+by {authors}
+
+{remotes}
+
+─────────────────────────────
+
+Generated on {generated_date}
+by src-book v{tool_version}
+
+{licences}
+
+─────────────────────────────
+
+Statistics
+
+  {file_count} source files
+  {line_count} lines of code
+  {total_bytes}
+  {commit_count} commits ({date_range})
+
+{language_stats}
+
+Commit Activity
+
+{commit_chart}"""
+
+[epub.metadata]
+subject = "Source code book"
+keywords = "rust,cli,source code"
+language = "en"
+
+[epub.fonts]
+embed = true
+family = "SourceCodePro"
