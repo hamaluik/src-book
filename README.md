@@ -1,357 +1,342 @@
 # src-book
 
-Convert source code repositories into printable PDF books.
+Convert source code repositories into printable books.
 
 Archive your software the old-fashioned way by turning your codebase into a
 formatted book with syntax highlighting, table of contents, and commit history.
+Output to PDF for printing or EPUB for e-readers.
 
-## Features
+## Prerequisites
 
-- Extracts files from git repositories (respects `.gitignore`)
-- Syntax highlighting with configurable themes
-- Generated PDF includes:
-  - Title page with authors
-  - Table of contents with clickable links
-  - Frontmatter section for documentation files (README, LICENSE, etc.)
-  - Syntax-highlighted source files
-  - Embedded images (PNG, JPG, SVG, etc.)
-  - Commit history
-  - Hierarchical PDF bookmarks for navigation
-  - Customisable headers and footers with template placeholders
-  - Section-specific page numbering (Roman numerals for frontmatter, etc.)
-- Configurable page dimensions, margins, and fonts
-- Optional booklet PDF output for saddle-stitch binding
-- Entrypoint-aware file ordering for logical reading flow
-- Progress bar during rendering for large repositories
+- Rust 1.70 or later
+- A git repository to convert
+
+### Dependencies
+
+This project depends on [pdf-gen](../pdf-gen), a sibling crate for PDF
+generation. Clone it alongside this repository:
+
+```
+projects/
+├── pdf-gen/      # PDF generation library
+└── src-book/     # This project
+```
+
+### Git Submodules
+
+Syntax highlighting themes are included as git submodules. After cloning,
+initialise them:
+
+```bash
+git submodule update --init --recursive
+```
+
+If themes fail to load during build, this is usually the cause.
 
 ## Installation
 
 ```bash
+# Initialise submodules first
+git submodule update --init --recursive
+
+# Build and install
 cargo install --path .
 ```
 
-Or build from source:
+Or build without installing:
 
 ```bash
 cargo build --release
 ```
 
+The binary will be at `target/release/src-book`.
+
+## Quick Start
+
+```bash
+# Navigate to your project
+cd /path/to/your/project
+
+# Run the interactive configuration wizard
+src-book config
+
+# Generate the book
+src-book render
+```
+
+The wizard creates a `src-book.toml` configuration file, then `render` produces
+your PDF and/or EPUB.
+
+## Features
+
+### Output Formats
+
+- **PDF**: Print-ready document with optional booklet layout for saddle-stitch
+  binding
+- **EPUB**: E-reader compatible format with syntax highlighting and navigation
+
+### Book Contents
+
+- Title page with authors and licences
+- Table of contents with clickable links
+- Frontmatter section for documentation (README, LICENSE, etc.)
+- Syntax-highlighted source files
+- Embedded images (PNG, JPG, SVG)
+- Commit history appendix
+- Hierarchical bookmarks for navigation
+
+### Layout and Typography
+
+- Configurable page dimensions and margins
+- Asymmetric margins for booklet binding
+- Bundled monospace fonts (Source Code Pro, Fira Mono)
+- Custom font support
+- Section-specific page numbering (Roman numerals for frontmatter, etc.)
+- Customisable headers and footers with template placeholders
+
+### Smart Defaults
+
+- Extracts files from git repositories (respects `.gitignore`)
+- Auto-detects project title, entrypoint, and licences
+- Entrypoint-aware file ordering for logical reading flow
+- Optional submodule exclusion
+- Layout capacity analysis to prevent line wrapping issues
+
 ## Usage
 
-### 1. Create a configuration file
+### 1. Configure
 
-Run the interactive configuration wizard:
+Run the interactive wizard to create `src-book.toml`:
 
 ```bash
 src-book config
 ```
 
-This will prompt you for:
+The wizard prompts for:
 - Book title
-- Repository path
-- File globs to exclude
+- Repository path and file exclusions
 - Frontmatter file selection
-- Authors
-- Licenses
-- Output PDF settings
+- Authors and licences
+- Output format settings (PDF, EPUB, or both)
+- Page size, fonts, and theme
 
-The wizard creates a `src-book.toml` configuration file.
+For CI/scripting, use non-interactive mode:
 
-### 2. Update the configuration (optional)
+```bash
+src-book config --yes              # Use detected defaults
+src-book config --yes -o book.pdf  # Override output path
+```
 
-If files have been added or removed from your repository, refresh the file lists
-without re-running the full wizard:
+### 2. Update (optional)
+
+If files have changed in your repository, refresh the file lists without
+re-running the full wizard:
 
 ```bash
 src-book update
 ```
 
-This re-scans the repository while preserving your settings:
-- Refreshes source files and authors from git
-- Keeps existing frontmatter, prompts for newly detected candidates
-- Handles missing entrypoints interactively
+This re-scans the repository while preserving your settings.
 
-### 3. Render the PDF
+### 3. Render
+
+Generate the configured outputs:
 
 ```bash
 src-book render
 ```
 
-This reads `src-book.toml` and generates the PDF.
+Before rendering, the tool displays layout information showing characters per
+line for PDF output, giving you a chance to cancel and adjust settings if
+needed.
 
-## Configuration
+## Configuration Reference
 
-Example `src-book.toml`:
+The `src-book.toml` file is organised into sections. Below are the key options;
+the wizard generates a complete file with all available settings.
+
+### Source Settings
 
 ```toml
 [source]
 title = "My Project"
 repository = "."
-licenses = ["Apache-2.0", "MIT"]
-entrypoint = "src/main.rs"  # optional: controls file ordering
-frontmatter_files = ["README.md", "Cargo.toml", "LICENSE"]  # optional: docs before source code
+licences = ["MIT"]
+commit_order = "NewestFirst"  # NewestFirst | OldestFirst | Disabled
+entrypoint = "src/main.rs"
+block_globs = ["*.generated.rs"]
+exclude_submodules = true
+frontmatter_files = ["README.md", "LICENSE"]
+source_files = ["src/main.rs", "src/lib.rs"]
 
 [[source.authors]]
 identifier = "Jane Doe <jane@example.com>"
+```
 
+### PDF Settings
+
+```toml
 [pdf]
 outfile = "my-project.pdf"
-theme = "GitHub"
 font = "SourceCodePro"
+theme = "Solarized (light)"
 
-# Page dimensions (in inches)
-page_width_in = 5.5
-page_height_in = 8.5
+[pdf.page]
+width_in = 5.5
+height_in = 8.5
 
-# Asymmetric margins for booklet printing (in inches)
-margin_top_in = 0.5
-margin_bottom_in = 0.25
-margin_inner_in = 0.25   # gutter side, bound edge
-margin_outer_in = 0.125  # outer edge
+[pdf.margins]
+top_in = 0.5
+bottom_in = 0.25
+inner_in = 0.25   # gutter side
+outer_in = 0.125
 
-# Font sizes (in points) - all optional with sensible defaults
-font_size_title_pt = 32.0
-font_size_heading_pt = 24.0
-font_size_subheading_pt = 12.0
-font_size_body_pt = 10.0
-font_size_small_pt = 8.0
+[pdf.fonts]
+title_pt = 32.0
+heading_pt = 24.0
+subheading_pt = 12.0
+body_pt = 10.0
+small_pt = 8.0
 
-# Booklet output (optional) - omit to skip booklet generation
-booklet_outfile = "my-project-booklet.pdf"
-booklet_signature_size = 16        # pages per signature (must be divisible by 4)
-booklet_sheet_width_in = 11.0      # physical sheet width (US Letter landscape)
-booklet_sheet_height_in = 8.5      # physical sheet height
-```
+[pdf.header]
+template = "{file}"
+position = "Outer"
+rule = "Below"
 
-### Source Options
+[pdf.footer]
+template = "{n}"
+position = "Outer"
+rule = "None"
 
-| Option              | Description                                                                       |
-| ------------------- | --------------------------------------------------------------------------------- |
-| `title`             | Book title displayed on the title page                                            |
-| `repository`        | Path to the git repository                                                        |
-| `licenses`          | SPDX licence identifiers                                                          |
-| `entrypoint`        | Optional file path that will appear first; files in its directory are prioritised |
-| `frontmatter_files` | Documentation files rendered before source code (README, LICENSE, etc.)           |
-| `source_files`      | Explicit list of files to include (auto-generated by config wizard)               |
-
-### PDF Options
-
-| Option             | Default         | Description                            |
-| ------------------ | --------------- | -------------------------------------- |
-| `font`             | `SourceCodePro` | Font family name or path               |
-| `theme`            | `GitHub`        | Syntax highlighting theme              |
-| `page_width_in`    | `5.5`           | Page width in inches                   |
-| `page_height_in`   | `8.5`           | Page height in inches                  |
-| `margin_top_in`    | `0.5`           | Top margin                             |
-| `margin_bottom_in` | `0.25`          | Bottom margin                          |
-| `margin_inner_in`  | `0.25`          | Inner (gutter) margin for binding      |
-| `margin_outer_in`  | `0.125`         | Outer margin                           |
-| `font_size_*_pt`   | varies          | Font sizes for different text elements |
-
-### Booklet Options
-
-| Option                    | Default | Description                                                    |
-| ------------------------- | ------- | -------------------------------------------------------------- |
-| `booklet_outfile`         | none    | Output path for print-ready booklet PDF (omit to skip booklet) |
-| `booklet_signature_size`  | `16`    | Pages per signature (must be divisible by 4)                   |
-| `booklet_sheet_width_in`  | `11.0`  | Physical sheet width (landscape US Letter)                     |
-| `booklet_sheet_height_in` | `8.5`   | Physical sheet height                                          |
-
-### Header and Footer Options
-
-Headers and footers can be customised with template strings containing placeholders:
-
-| Placeholder | Description                                                    |
-| ----------- | -------------------------------------------------------------- |
-| `{file}`    | Current file path                                              |
-| `{title}`   | Book title                                                     |
-| `{n}`       | Page number (formatted per section's numbering style)          |
-| `{total}`   | Section's total page count (formatted per section's style)     |
-
-| Option              | Default   | Description                                        |
-| ------------------- | --------- | -------------------------------------------------- |
-| `header_template`   | `{file}`  | Header text template (empty string disables)       |
-| `header_position`   | `Outer`   | Horizontal position (see below)                    |
-| `header_rule`       | `Below`   | Horizontal line: `None`, `Above`, or `Below`       |
-| `footer_template`   | `{n}`     | Footer text template (empty string disables)       |
-| `footer_position`   | `Outer`   | Horizontal position (see below)                    |
-| `footer_rule`       | `None`    | Horizontal line: `None`, `Above`, or `Below`       |
-
-Position options:
-
-- `Outer` - alternates left/right for binding (default: right on odd pages, left on even)
-- `Inner` - opposite of Outer (for headers/footers on the gutter side)
-- `Centre` - always centred
-- `Left` - always left-aligned
-- `Right` - always right-aligned
-
-Example configuration:
-
-```toml
-[pdf]
-header_template = "{title}"
-header_position = "Centre"
-header_rule = "Below"
-footer_template = "Page {n} of {total}"
-footer_position = "Outer"
-```
-
-### Section-Specific Page Numbering
-
-Each document section (frontmatter, source, appendix) can have its own page
-numbering style and starting number. This allows traditional book formatting
-where frontmatter uses Roman numerals and source code starts fresh at page 1.
-
-| Section                 | Default Style | Default Start |
-| ----------------------- | ------------- | ------------- |
-| `frontmatter_numbering` | `RomanLower`  | `1`           |
-| `source_numbering`      | `Arabic`      | `1`           |
-| `appendix_numbering`    | `Arabic`      | `1`           |
-
-Each section numbering is configured with:
-- `style`: `Arabic` (1, 2, 3), `RomanLower` (i, ii, iii), or `RomanUpper` (I, II, III)
-- `start`: starting page number for the section
-
-Example configuration:
-
-```toml
-[pdf.frontmatter_numbering]
+[pdf.numbering.frontmatter]
 style = "RomanLower"
 start = 1
 
-[pdf.source_numbering]
-style = "Arabic"
-start = 1
-
-[pdf.appendix_numbering]
+[pdf.numbering.source]
 style = "Arabic"
 start = 1
 ```
 
-The `{n}` and `{total}` placeholders in header/footer templates automatically
-format according to each page's section, and the table of contents displays
-page numbers matching each entry's section style.
+### EPUB Settings
 
-**Note:** Legacy configs using `page_number_style` and `page_number_start` at
-the top level are still supported for backwards compatibility.
+```toml
+[epub]
+outfile = "my-project.epub"
+theme = "GitHub"
 
-### Available Syntax Themes
+[epub.cover]
+template = "{title}\n\n{authors}"
+image = ""
 
-- `Solarized (light)`
-- `OneHalfLight`
-- `gruvbox (Light) (Hard)`
-- `GitHub`
+[epub.metadata]
+language = "en"
+```
 
-### Fonts
+### Booklet Settings
 
-Two monospace fonts are bundled:
+For saddle-stitch binding, enable booklet output:
 
-- `SourceCodePro` (default) - includes Regular, Bold, Italic, and BoldItalic
-  variants
-- `FiraMono` - includes Regular and Bold (falls back to regular for italic
-  styles)
+```toml
+[pdf.booklet]
+outfile = "my-project-booklet.pdf"
+signature_size = 16
+sheet_width_in = 11.0
+sheet_height_in = 8.5
+```
 
-#### Using Custom Fonts
+## Template Placeholders
 
-You can use your own fonts by placing `.ttf` files next to `src-book.toml` and
-setting the font path:
+Headers, footers, title pages, and cover pages support these placeholders:
+
+| Placeholder        | Description                          | Available In            |
+|--------------------|--------------------------------------|-------------------------|
+| `{title}`          | Book title                           | All templates           |
+| `{authors}`        | Formatted author list                | Title, cover, colophon  |
+| `{licences}`       | Licence identifiers                  | Title, cover, colophon  |
+| `{date}`           | Current date                         | Title, cover            |
+| `{file}`           | Current file path                    | Header, footer          |
+| `{n}`              | Page number (section-formatted)      | Header, footer          |
+| `{total}`          | Section page count                   | Header, footer          |
+| `{remotes}`        | Git remote URLs                      | Colophon                |
+| `{file_count}`     | Number of files                      | Colophon                |
+| `{line_count}`     | Total lines of code                  | Colophon                |
+| `{commit_count}`   | Number of commits                    | Colophon                |
+| `{language_stats}` | Lines per language breakdown         | Colophon                |
+| `{commit_chart}`   | ASCII commit activity histogram      | Colophon                |
+
+## Available Themes
+
+- Solarized (light)
+- OneHalfLight
+- gruvbox (Light) (Hard)
+- GitHub
+
+All themes are light-coloured, optimised for printing on white paper.
+
+## Bundled Fonts
+
+| Font           | Variants                                |
+|----------------|-----------------------------------------|
+| SourceCodePro  | Regular, Bold, Italic, BoldItalic       |
+| FiraMono       | Regular, Bold (italic falls back)       |
+
+### Custom Fonts
+
+Place `.ttf` files next to `src-book.toml`:
 
 ```toml
 [pdf]
 font = "./MyFont"
 ```
 
-The tool will look for files matching these patterns:
+The tool looks for:
 - `MyFont-Regular.ttf` (required)
-- `MyFont-Bold.ttf` (optional, falls back to Regular)
+- `MyFont-Bold.ttf` (optional)
 - `MyFont-Italic.ttf` or `MyFont-It.ttf` (optional)
 - `MyFont-BoldItalic.ttf` or `MyFont-BoldIt.ttf` (optional)
 
-### Font Sizes
+## Booklet Printing
 
-Font sizes can be individually configured, or the config wizard will calculate
-them from a base size:
+The booklet PDF uses saddle-stitch imposition. When printed double-sided and
+folded, pages appear in the correct order.
 
-| Size                      | Default | Used for                             |
-| ------------------------- | ------- | ------------------------------------ |
-| `font_size_title_pt`      | 32      | Title page heading                   |
-| `font_size_heading_pt`    | 24      | Section headings (e.g., "Contents")  |
-| `font_size_subheading_pt` | 12      | File path headers on each page       |
-| `font_size_body_pt`       | 10      | Source code text                     |
-| `font_size_small_pt`      | 8       | Line numbers, page numbers, metadata |
+### Printing Instructions
 
-The config wizard calculates these from a base size using ratios: title = 3.2×,
-heading = 2.4×, subheading = 1.2×, body = 1×, small = 0.8×.
+1. Print double-sided, flipping on the **short edge**
+2. Print one signature at a time (16 pages = 4 sheets by default)
+3. For each signature: nest the sheets and fold in half
+4. Stack all signatures and bind along the spine
 
-### Frontmatter
+### Signatures
 
-Frontmatter files are documentation and metadata files that appear in their own
-section before source code. The config wizard auto-detects common frontmatter
+A signature is a group of nested, folded sheets. The `signature_size` setting
+(must be divisible by 4) controls pages per signature:
+
+- 16 pages = 4 sheets (common for small booklets)
+- 32 or 48 pages for thicker books with proper binding
+
+The tool pads the final signature with blank pages if needed.
+
+## Frontmatter
+
+Frontmatter files appear in their own section before source code, giving readers
+context before diving into implementation. The wizard auto-detects common
 candidates:
 
 - README, ARCHITECTURE, CONTRIBUTING, CHANGELOG
 - CODE_OF_CONDUCT, SECURITY
-- Manifest files: Cargo.toml, package.json, pyproject.toml, go.mod
-- LICENSE files
+- Manifest files (Cargo.toml, package.json, pyproject.toml, go.mod)
+- Licence files
 
-These files get their own "Frontmatter" section in both the table of contents
-and PDF bookmarks. Readers see project documentation first, giving context
-before diving into code.
+## Entrypoint and File Ordering
 
-The wizard presents detected files for selection, with all candidates
-pre-selected by default. You can deselect files to keep them with regular source
-code, or the wizard will skip frontmatter entirely if no candidates are
-detected.
+Specifying an entrypoint (e.g., `src/main.rs`) sorts files for logical reading:
 
-### Entrypoint and File Ordering
-
-When you specify an `entrypoint` (e.g., `src/main.rs`), source files are sorted
-with:
 1. The entrypoint file first
 2. Other files in the entrypoint's directory
 3. Subdirectories of the entrypoint's directory
 4. Everything else alphabetically
 
-This ordering helps readers start with the main entry point and naturally flow
-through related code. Frontmatter files are always rendered before source files,
-regardless of entrypoint settings.
+## Licence
 
-## Booklet Printing
-
-The booklet output creates a print-ready PDF with saddle-stitch imposition.
-Pages are arranged so that when you print double-sided, fold the sheets, and
-nest them together, the pages appear in the correct order.
-
-### Printing Instructions
-
-1. Print the booklet PDF double-sided, flipping on the **short edge**
-2. Print one signature at a time (default 16 pages = 4 sheets)
-3. For each signature: nest the sheets together and fold in half
-4. Stack all signatures and sew or staple along the spine
-
-### Understanding Signatures
-
-A **signature** is a group of nested, folded sheets bound together. The
-`booklet_signature_size` setting controls how many logical pages go into each
-signature:
-
-- 16 pages per signature = 4 sheets nested together (common for small booklets)
-- Larger signatures (32, 48) work for thicker books with proper binding
-- The signature size must be divisible by 4
-
-The tool automatically pads the final signature with blank pages if needed.
-
-### Sheet Dimensions
-
-The default sheet size (11" × 8.5") is US Letter in landscape orientation, which
-produces two 5.5" × 8.5" half-letter pages side by side. Adjust these values if
-you're using different paper or want different final page dimensions.
-
-## Requirements
-
-- Rust 1.70+
-- The target repository must be a git repository
-
-## License
-
-See repository for license information.
+Apache-2.0
