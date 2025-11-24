@@ -13,12 +13,14 @@ frontmatter_files = [
 ]
 source_files = [
     "src/main.rs",
+    "src/character_width.rs",
     "src/cli.rs",
     "src/config_wizard.rs",
     "src/detection.rs",
     "src/file_ordering.rs",
     "src/formatting.rs",
     "src/highlight.rs",
+    "src/line_analysis.rs",
     "src/update.rs",
     "src/source/author.rs",
     "src/source/commit.rs",
@@ -62,7 +64,7 @@ source_files = [
 user_names = []
 name = "Kenton Hamaluik"
 email = "kenton@hamaluik.ca"
-prominence = 45
+prominence = 46
 
 [pdf]
 outfile = "src-book.pdf"
@@ -74,17 +76,17 @@ width_in = 5.5
 height_in = 8.5
 
 [pdf.margins]
-top_in = 0.25
+top_in = 0.5
 bottom_in = 0.25
 inner_in = 0.25
 outer_in = 0.125
 
 [pdf.fonts]
-title_pt = 26.0
-heading_pt = 19.0
-subheading_pt = 10.0
-body_pt = 6.0
-small_pt = 5.0
+title_pt = 22.0
+heading_pt = 17.0
+subheading_pt = 8.0
+body_pt = 7.0
+small_pt = 6.0
 
 [pdf.header]
 template = "{file}"
@@ -98,7 +100,6 @@ rule = "Above"
 
 [pdf.title_page]
 template = """
-```
 ╭┬───────────────────────────╮
 ││                           │
 ││ /// src-book              │
@@ -110,9 +111,8 @@ template = """
 ││ }                         │
 ││                           │
 ├┼───────────────────────────┤
-││░░░░░░░░░░░░░░░░░░░░░░░░░░░
-╰┴───────────────────────────╯
-```"""
+││░░░░░░░░░░░░░░░░░░░░░░░░░░░│
+╰┴───────────────────────────╯"""
 image = ""
 image_position = "Top"
 image_max_height_in = 2.0
@@ -173,55 +173,3 @@ start = 1
 [pdf.numbering.appendix]
 style = "Arabic"
 start = 1
-
-[epub]
-outfile = "src-book.epub"
-theme = "Catppuccin Latte"
-
-[epub.cover]
-template = """
-{title}
-
-- by -
-
-{authors}"""
-image = ""
-
-[epub.colophon]
-template = """
-{title}
-
-by {authors}
-
-{remotes}
-
----
-
-Generated on {generated_date}
-by src-book v{tool_version}
-
-{licences}
-
----
-
-Statistics
-
-  {file_count} source files
-  {line_count} lines of code
-  {total_bytes}
-  {commit_count} commits ({date_range})
-
-{language_stats}
-
-Commit Activity
-
-{commit_chart}"""
-
-[epub.metadata]
-subject = ""
-keywords = ""
-language = "en"
-
-[epub.fonts]
-embed = true
-family = "SourceCodePro"

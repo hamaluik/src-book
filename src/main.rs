@@ -15,12 +15,14 @@ use config_wizard::Configuration;
 use indicatif::{ProgressBar, ProgressStyle};
 use std::process::ExitCode;
 
+mod character_width;
 mod cli;
 mod config_wizard;
 mod detection;
 mod file_ordering;
 mod formatting;
 mod highlight;
+mod line_analysis;
 mod sinks {
     pub mod epub;
     pub mod pdf;
@@ -65,6 +67,48 @@ fn try_main() -> Result<()> {
             }
 
             let Configuration { source, pdf, epub } = config;
+
+            // display layout capacity before rendering so users know what to expect
+            // this helps identify potential readability issues (line wrapping) before
+            // committing time to PDF generation
+            println!();
+            println!("Layout information:");
+            println!("===================");
+
+            if let Some(ref pdf_config) = pdf {
+                use sinks::pdf::LoadedFonts;
+
+                let fonts = LoadedFonts::load(&pdf_config.font)
+                    .expect("can load font for layout calculation");
+
+                // convert margin config to points for calculation
+                let left_margin_pt = pdf_config.margins.inner_in * 72.0;
+                let right_margin_pt = pdf_config.margins.outer_in * 72.0;
+
+                let max_chars = character_width::calculate_max_chars_per_line(
+                    pdf_config.page.width_in,
+                    left_margin_pt,
+                    right_margin_pt,
+                    &fonts.regular,
+                    pdf_config.fonts.body_pt,
+                );
+
+                println!(
+                    "PDF: ~{} characters per line for code (Font: {}, Size: {} pt)",
+                    max_chars, pdf_config.font, pdf_config.fonts.body_pt
+                );
+                println!(
+                    "     Page: {}\" × {}\" (accounts for 6-character line numbers)",
+                    pdf_config.page.width_in, pdf_config.page.height_in
+                );
+            }
+
+            if epub.is_some() {
+                println!("EPUB: Responsive layout (no fixed line width)");
+            }
+
+            println!("===================");
+            println!();
 
             if let Some(pdf) = pdf {
                 let total_files = source.frontmatter_files.len() + source.source_files.len();

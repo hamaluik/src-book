@@ -20,3 +20,4 @@ pub use config::{
     NumberingConfig, PageConfig, PageSize, Position, RulePosition, SyntaxTheme, TitlePageConfig,
     TitlePageImagePosition, PDF,
 };
+pub use fonts::LoadedFonts;

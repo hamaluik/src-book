@@ -158,23 +158,43 @@ fn print_theme_preview(theme: SyntaxTheme, ss: &SyntaxSet, ts: &ThemeSet) {
     println!("{WHITE_BG}{:box_width$}{RESET}", "");
 }
 
-/// Run the configuration wizard.
+/// Runs the configuration wizard to create or update `src-book.toml`.
+///
+/// The wizard operates in two modes based on the provided arguments:
+///
+/// **Interactive mode** (default): Prompts the user for all configuration options including
+/// book metadata, file selection, page layout, and output formats. Shows live previews of
+/// syntax themes and displays calculated layout information (characters per line) to help
+/// users make informed decisions about page size and font settings.
+///
+/// **Non-interactive mode** (`--yes` or `--config-from`): Automatically generates
+/// configuration using detected defaults without prompting. Useful for CI/CD pipelines
+/// and scripting scenarios where user interaction isn't possible.
 ///
 /// # Arguments
 ///
 /// * `args` - CLI arguments controlling wizard behaviour:
 ///   - `yes`: Skip all prompts, use detected defaults
-///   - `config_from`: Load PDF settings from existing config file (implies `yes`)
+///   - `config_from`: Load settings from existing config file as template (implies `yes`)
 ///   - `output`: Override PDF output path
 ///
 /// # Non-Interactive Behaviour
 ///
 /// When `args.yes` is true or `args.config_from` is provided, the wizard:
 /// - Uses detected title, entrypoint, licences, frontmatter, and authors
-/// - Applies sensible defaults for all PDF settings
+/// - Applies sensible defaults for all settings (Half Letter page, Solarized theme, etc.)
 /// - Overwrites existing `src-book.toml` without confirmation
+/// - Skips layout information display
 ///
-/// Priority for PDF settings: `--output` flag > template > detected defaults
+/// Priority for settings: `--output` flag > template config > detected defaults
+///
+/// # Layout Information Display
+///
+/// In interactive mode, after selecting page dimensions and font size, the wizard displays
+/// calculated layout capacity (approximate characters per line) using actual glyph metrics.
+/// This helps users understand whether their source code will wrap or remain readable in
+/// the chosen format. The calculation accounts for margins, line numbers (6 characters),
+/// and uses the widest monospace glyph ('M') for conservative estimates.
 pub fn run(args: &ConfigArgs) -> Result<()> {
     let non_interactive = args.yes || args.config_from.is_some();
     let template = args.config_from.as_ref().map(load_template).transpose()?;
@@ -721,11 +741,149 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
         };
 
         // calculate derived font sizes from base, rounded to integers
-        let font_size_title_pt = (base_font_size * 3.2).round();
-        let font_size_heading_pt = (base_font_size * 2.4).round();
-        let font_size_subheading_pt = (base_font_size * 1.2).round();
-        let font_size_body_pt = base_font_size.round();
-        let font_size_small_pt = (base_font_size * 0.8).round();
+        let mut font_size_title_pt = (base_font_size * 3.2).round();
+        let mut font_size_heading_pt = (base_font_size * 2.4).round();
+        let mut font_size_subheading_pt = (base_font_size * 1.2).round();
+        let mut font_size_body_pt = base_font_size.round();
+        let mut font_size_small_pt = (base_font_size * 0.8).round();
+
+        // show layout capacity so users can assess readability before committing to config
+        // helps catch cases where chosen page size is too small for their code line lengths
+        if !non_interactive {
+            use crate::sinks::pdf::LoadedFonts;
+
+            // load SourceCodePro to calculate exact character widths
+            let fonts =
+                LoadedFonts::load("SourceCodePro").expect("can load bundled SourceCodePro font");
+
+            // use default margins for calculation
+            let margins = MarginsConfig::default();
+            let left_margin_pt = margins.inner_in * 72.0;
+            let right_margin_pt = margins.outer_in * 72.0;
+
+            let mut max_chars = crate::character_width::calculate_max_chars_per_line(
+                page_width_in,
+                left_margin_pt,
+                right_margin_pt,
+                &fonts.regular,
+                font_size_body_pt,
+            );
+
+            println!();
+            println!(
+                "Layout capacity: ~{} characters per line for code (SourceCodePro, {} pt)",
+                max_chars, font_size_body_pt
+            );
+            println!("                 (including line number space: 6 chars)");
+            println!();
+
+            // offer to scan source files to check for long lines
+            let should_scan = Confirm::with_theme(&theme)
+                .with_prompt("Scan source files to check for long lines?")
+                .default(true)
+                .interact()?;
+
+            if should_scan {
+                // allow font size adjustment loop until user is satisfied
+                loop {
+                    let stats = crate::line_analysis::analyze_line_lengths(
+                        &source.source_files,
+                        &source.repository,
+                        max_chars,
+                    )?;
+
+                    // display statistics
+                    println!();
+                    if stats.total_lines == 0 {
+                        println!("No source files found to analyze.");
+                        break;
+                    }
+
+                    println!(
+                        "Found {} total lines, {} ({:.1}%) would wrap",
+                        crate::formatting::format_number(stats.total_lines),
+                        crate::formatting::format_number(stats.lines_that_wrap),
+                        stats.wrap_percentage()
+                    );
+
+                    if stats.longest_line_length > 0 {
+                        println!(
+                            "Longest line: {}:{} ({} chars)",
+                            stats.longest_line_file.display(),
+                            stats.longest_line_number,
+                            stats.longest_line_length
+                        );
+                    }
+
+                    // suggest font size adjustment if any lines wrap
+                    if stats.lines_that_wrap > 0 {
+                        // calculate font size to fit 95th percentile
+                        let suggested_font_size =
+                            crate::line_analysis::calculate_suggested_font_size(
+                                page_width_in as f64,
+                                margins.inner_in as f64,
+                                margins.outer_in as f64,
+                                stats.percentile_95,
+                                &fonts.regular,
+                            );
+
+                        // only suggest reduction if it's actually smaller than current size
+                        if suggested_font_size < font_size_body_pt as f64 {
+                            println!();
+                            let should_adjust = Confirm::with_theme(&theme)
+                                .with_prompt(format!(
+                                    "Reduce font size to {:.1} pt to fit 95% of lines?",
+                                    suggested_font_size
+                                ))
+                                .default(true)
+                                .interact()?;
+
+                            if should_adjust {
+                                // update font sizes with new base
+                                let base_font_size = suggested_font_size as f32;
+                                font_size_title_pt = (base_font_size * 3.2).round();
+                                font_size_heading_pt = (base_font_size * 2.4).round();
+                                font_size_subheading_pt = (base_font_size * 1.2).round();
+                                font_size_body_pt = base_font_size.round();
+                                font_size_small_pt = (base_font_size * 0.8).round();
+
+                                // recalculate max chars with new font size
+                                max_chars = crate::character_width::calculate_max_chars_per_line(
+                                    page_width_in,
+                                    left_margin_pt,
+                                    right_margin_pt,
+                                    &fonts.regular,
+                                    font_size_body_pt,
+                                );
+
+                                println!();
+                                println!(
+                                    "Updated layout capacity: ~{} characters per line (SourceCodePro, {} pt)",
+                                    max_chars, font_size_body_pt
+                                );
+                                println!();
+
+                                // loop to re-scan with new font size
+                                continue;
+                            } else {
+                                // user declined adjustment, exit loop
+                                break;
+                            }
+                        } else {
+                            // font is already small enough, can't reduce further
+                            println!();
+                            println!("Font size is already optimal for your line lengths.");
+                            println!();
+                            break;
+                        }
+                    } else {
+                        println!("All lines fit within the page width!");
+                        println!();
+                        break;
+                    }
+                }
+            }
+        }
 
         // ask about booklet generation
         // in non-interactive mode, skip booklet unless template has it configured
@@ -1393,7 +1551,6 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
     }
 
     let config = Configuration { source, pdf, epub };
-
     let config_str = toml::to_string_pretty(&config)
         .with_context(|| "Failed to convert configuration to TOML")?;
 
@@ -1417,6 +1574,8 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             println!("src-book.toml written (non-interactive mode)");
         } else {
             println!("src-book.toml written!");
+            println!("Please review and edit the configuration as needed before rendering.");
+            println!("You can run 'src-book render' to render the book!");
         }
     } else {
         println!("Configuration:");
