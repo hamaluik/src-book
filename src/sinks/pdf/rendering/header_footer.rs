@@ -206,8 +206,8 @@ pub fn render_headers_and_footers(
     // calculate section totals from page metadata
     let section_totals = calculate_section_totals(page_metadata);
 
-    let header_size = Pt(config.font_size_subheading_pt);
-    let footer_size = Pt(config.font_size_small_pt);
+    let header_size = Pt(config.fonts.subheading_pt);
+    let footer_size = Pt(config.fonts.small_pt);
 
     // get underline metrics for rules
     let (line_offset, line_thickness) = doc.fonts[font_ids.regular]
@@ -234,9 +234,9 @@ pub fn render_headers_and_footers(
         let content_box = page.content_box;
 
         // render header if template is non-empty
-        if !config.header_template.is_empty() {
+        if !config.header.template.is_empty() {
             let text = expand_template(
-                &config.header_template,
+                &config.header.template,
                 metadata.file_path.as_deref(),
                 title,
                 &metadata,
@@ -247,7 +247,7 @@ pub fn render_headers_and_footers(
             if !text.is_empty() {
                 let text_width =
                     layout::width_of_text(&text, &doc.fonts[font_ids.regular], header_size);
-                let x = calculate_x_position(config.header_position, pi, &content_box, text_width);
+                let x = calculate_x_position(config.header.position, pi, &content_box, text_width);
 
                 // header at top of content box
                 let y = content_box.y2 - doc.fonts[font_ids.regular].ascent(header_size);
@@ -264,7 +264,7 @@ pub fn render_headers_and_footers(
 
                 // render header rule
                 let baseline_y = y;
-                match config.header_rule {
+                match config.header.rule {
                     RulePosition::None => {}
                     RulePosition::Above => {
                         let rule_y =
@@ -280,9 +280,9 @@ pub fn render_headers_and_footers(
         }
 
         // render footer if template is non-empty
-        if !config.footer_template.is_empty() {
+        if !config.footer.template.is_empty() {
             let text = expand_template(
-                &config.footer_template,
+                &config.footer.template,
                 metadata.file_path.as_deref(),
                 title,
                 &metadata,
@@ -293,7 +293,7 @@ pub fn render_headers_and_footers(
             if !text.is_empty() {
                 let text_width =
                     layout::width_of_text(&text, &doc.fonts[font_ids.regular], footer_size);
-                let x = calculate_x_position(config.footer_position, pi, &content_box, text_width);
+                let x = calculate_x_position(config.footer.position, pi, &content_box, text_width);
 
                 // footer near bottom of page
                 let y: Pt = In(0.25).into();
@@ -309,7 +309,7 @@ pub fn render_headers_and_footers(
                 });
 
                 // render footer rule
-                match config.footer_rule {
+                match config.footer.rule {
                     RulePosition::None => {}
                     RulePosition::Above => {
                         let rule_y = y + doc.fonts[font_ids.regular].ascent(footer_size) + Pt(2.0);

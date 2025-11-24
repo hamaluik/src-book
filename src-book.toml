@@ -1,10 +1,11 @@
 [source]
 title = "Src Book"
 repository = "."
+block_globs = ["Cargo.lock"]
 exclude_submodules = true
 entrypoint = "src/main.rs"
 commit_order = "OldestFirst"
-licenses = ["Apache-2.0"]
+licences = ["Apache-2.0"]
 frontmatter_files = [
     "README.md",
     "Cargo.toml",
@@ -37,8 +38,8 @@ source_files = [
     "src/sinks/pdf/rendering/source_file.rs",
     "src/sinks/pdf/rendering/table_of_contents.rs",
     "src/sinks/pdf/rendering/title_page.rs",
-    "Cargo.lock",
     "build.rs",
+    "logo.txt",
     "assets/fonts/FiraMono-Bold.ttf",
     "assets/fonts/FiraMono-Regular.ttf",
     "assets/fonts/SourceCodePro-Bold.ttf",
@@ -51,36 +52,63 @@ source_files = [
 user_names = []
 name = "Kenton Hamaluik"
 email = "kenton@hamaluik.ca"
-prominence = 40
+prominence = 41
 
 [pdf]
+outfile = "src-book.pdf"
 font = "SourceCodePro"
 theme = "Solarized (light)"
-outfile = "src-book.pdf"
-page_width_in = 5.5
-page_height_in = 8.5
-margin_top_in = 0.5
-margin_outer_in = 0.125
-margin_bottom_in = 0.25
-margin_inner_in = 0.25
-font_size_title_pt = 26.0
-font_size_heading_pt = 19.0
-font_size_subheading_pt = 10.0
-font_size_body_pt = 8.0
-font_size_small_pt = 6.0
-booklet_signature_size = 16
-booklet_sheet_width_in = 11.0
-booklet_sheet_height_in = 8.5
-render_binary_hex = false
-binary_hex_max_bytes = 65536
-font_size_hex_pt = 5.0
-header_template = "{file}"
-header_position = "Outer"
-header_rule = "Below"
-footer_template = "{n}"
-footer_position = "Outer"
-footer_rule = "None"
-colophon_template = """
+
+[pdf.page]
+width_in = 5.5
+height_in = 8.5
+
+[pdf.margins]
+top_in = 0.5
+bottom_in = 0.25
+inner_in = 0.25
+outer_in = 0.125
+
+[pdf.fonts]
+title_pt = 26.0
+heading_pt = 19.0
+subheading_pt = 10.0
+body_pt = 8.0
+small_pt = 6.0
+
+[pdf.header]
+template = "{file}"
+position = "Outer"
+rule = "Below"
+
+[pdf.footer]
+template = "{n}"
+position = "Outer"
+rule = "None"
+
+[pdf.title_page]
+template = """
+```
+╭┬───────────────────────────╮
+││                           │
+││ /// src-book              │
+││ ///                       │
+││ /// by Kenton Hamaluik    │
+││ fn main() {               │
+││   let book = render(src); │
+││   book.print();           │
+││ }                         │
+││                           │
+├┼───────────────────────────┤
+││░░░░░░░░░░░░░░░░░░░░░░░░░░░
+╰┴───────────────────────────╯
+```"""
+image = ""
+image_position = "Top"
+image_max_height_in = 2.0
+
+[pdf.colophon]
+template = """
 {title}
 
 by {authors}
@@ -108,23 +136,30 @@ Statistics
 Commit Activity
 
 {commit_chart}"""
-title_page_template = """
-{title}
 
-- by -
+[pdf.metadata]
+subject = ""
+keywords = ""
 
-{authors}"""
-title_page_image_position = "Top"
-title_page_image_max_height_in = 2.0
+[pdf.booklet]
+outfile = "src-book-booklet.pdf"
+signature_size = 16
+sheet_width_in = 11.0
+sheet_height_in = 8.5
 
-[pdf.frontmatter_numbering]
+[pdf.binary_hex]
+enabled = false
+max_bytes = 65536
+font_size_pt = 5.0
+
+[pdf.numbering.frontmatter]
 style = "RomanLower"
 start = 1
 
-[pdf.source_numbering]
+[pdf.numbering.source]
 style = "Arabic"
 start = 1
 
-[pdf.appendix_numbering]
+[pdf.numbering.appendix]
 style = "Arabic"
 start = 1

@@ -19,8 +19,8 @@ pub fn render(
     font_ids: &FontIds,
     commits: Vec<Commit>,
 ) -> Result<Option<usize>> {
-    let small_size = Pt(config.font_size_small_pt);
-    let subheading_size = Pt(config.font_size_subheading_pt);
+    let small_size = Pt(config.fonts.small_pt);
+    let subheading_size = Pt(config.fonts.subheading_pt);
 
     // convert the commits to a series of text spans
     let mut text: Vec<(String, Colour, SpanFont)> = Vec::with_capacity(commits.len() * 6);

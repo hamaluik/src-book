@@ -65,10 +65,10 @@ fn expand_template(template: &str, source: &Source) -> String {
         .collect::<Vec<_>>()
         .join("\n");
 
-    let licences = if source.licenses.is_empty() {
+    let licences = if source.licences.is_empty() {
         "No licence specified".to_string()
     } else {
-        source.licenses.join(", ")
+        source.licences.join(", ")
     };
 
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -166,16 +166,16 @@ pub fn render(
     source: &Source,
     image_paths: &mut ImagePathMap,
 ) -> Result<()> {
-    let title_size = Pt(config.font_size_title_pt);
-    let body_size = Pt(config.font_size_body_pt);
+    let title_size = Pt(config.fonts.title_pt);
+    let body_size = Pt(config.fonts.body_pt);
     const SPACING: Pt = Pt(72.0 * 0.25); // spacing between image and text
 
     let page_size = config.page_size();
     let mut page = Page::new(page_size, None);
 
     // load image if configured
-    let image_data = if let Some(ref image_path) = config.title_page_image {
-        let image = Image::new_from_disk(image_path)?;
+    let image_data = if let Some(image_path) = config.title_page_image_path() {
+        let image = Image::new_from_disk(&image_path)?;
         let aspect_ratio = image.aspect_ratio();
         let image_id = doc.add_image(image);
         let image_index = image_id.index();
@@ -184,7 +184,7 @@ pub fn render(
         image_paths.insert(image_index, image_path.clone());
 
         // calculate image size (constrain by max height and page width)
-        let max_height = config.title_page_image_max_height_in * 72.0;
+        let max_height = config.title_page.image_max_height_in * 72.0;
         let max_width = page_size.0 .0 * 0.8; // 80% of page width
 
         let (width, height) = if aspect_ratio >= 1.0 {
@@ -206,7 +206,7 @@ pub fn render(
 
     // expand template and parse into segments
     // temporarily mark title for identification after expansion
-    let template = config.title_page_template.replace("{title}", &format!("{}\n{}", source_title_marker(), source.title.clone().unwrap_or_else(|| "untitled".to_string())));
+    let template = config.title_page.template.replace("{title}", &format!("{}\n{}", source_title_marker(), source.title.clone().unwrap_or_else(|| "untitled".to_string())));
     let content = expand_template(&template, source);
     let segments = parse_segments(&content);
 
@@ -219,7 +219,7 @@ pub fn render(
     let total_height = image_height + text_height;
 
     // determine starting y position based on image position
-    let (image_y, text_start_y) = match config.title_page_image_position {
+    let (image_y, text_start_y) = match config.title_page.image_position {
         TitlePageImagePosition::Top => {
             let start_y = (page_size.1 + total_height) / 2.0;
             let image_y = image_data.as_ref().map(|(_, _, h)| start_y - *h);
@@ -243,7 +243,7 @@ pub fn render(
 
     // render image if present and position is Top
     if let (Some((image_index, width, height)), Some(img_y)) = (&image_data, image_y) {
-        if config.title_page_image_position == TitlePageImagePosition::Top {
+        if config.title_page.image_position == TitlePageImagePosition::Top {
             let x = (page_size.0 - *width) / 2.0;
             page.add_image(ImageLayout {
                 image_index: *image_index,
@@ -318,14 +318,14 @@ pub fn render(
 
     // render image if position is Centre or Bottom
     if let Some((image_index, width, height)) = &image_data {
-        let render_now = match config.title_page_image_position {
+        let render_now = match config.title_page.image_position {
             TitlePageImagePosition::Top => false,
             TitlePageImagePosition::Centre => true,
             TitlePageImagePosition::Bottom => true,
         };
         if render_now {
             let x = (page_size.0 - *width) / 2.0;
-            let image_y = match config.title_page_image_position {
+            let image_y = match config.title_page.image_position {
                 TitlePageImagePosition::Centre => (page_size.1 - *height) / 2.0,
                 TitlePageImagePosition::Bottom => y - SPACING,
                 TitlePageImagePosition::Top => unreachable!(),

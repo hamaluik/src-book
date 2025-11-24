@@ -21,8 +21,8 @@ pub fn render(
     path: &Path,
     image_paths: &mut ImagePathMap,
 ) -> Result<usize> {
-    let subheading_size = Pt(config.font_size_subheading_pt);
-    let small_size = Pt(config.font_size_small_pt);
+    let subheading_size = Pt(config.fonts.subheading_pt);
+    let small_size = Pt(config.fonts.small_pt);
 
     let image = Image::new_from_disk(path)?;
     let aspect_ratio = image.aspect_ratio();

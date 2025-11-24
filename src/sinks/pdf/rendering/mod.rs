@@ -101,10 +101,10 @@ impl PDF {
         if !authors.trim().is_empty() {
             info.author(authors);
         }
-        if let Some(subject) = &self.subject {
+        if let Some(subject) = self.subject_opt() {
             info.subject(subject);
         }
-        if let Some(keywords) = &self.keywords {
+        if let Some(keywords) = self.keywords_opt() {
             info.keywords(keywords);
         }
         info.creator(concat!("src-book v", env!("CARGO_PKG_VERSION")));
@@ -364,8 +364,8 @@ impl PDF {
         let page_count = doc.page_order.len();
 
         // generate booklet PDF if configured
-        let booklet_sheets = if let Some(booklet_path) = &self.booklet_outfile {
-            let sheets = render_booklet(self, source, &doc, &font_ids, &image_paths, booklet_path)
+        let booklet_sheets = if let Some(booklet_path) = self.booklet_outfile_path() {
+            let sheets = render_booklet(self, source, &doc, &font_ids, &image_paths, &booklet_path)
                 .with_context(|| "Failed to render booklet PDF")?;
             Some(sheets)
         } else {

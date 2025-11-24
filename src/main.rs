@@ -12,8 +12,10 @@ mod highlight;
 mod sinks {
     mod pdf;
     pub use pdf::{
-        default_colophon_template, default_title_page_template, PageSize, Position, RulePosition,
-        SyntaxTheme, TitlePageImagePosition, PDF,
+        default_colophon_template, default_title_page_template, BinaryHexConfig, BookletConfig,
+        ColophonConfig, FontSizesConfig, FooterConfig, HeaderConfig, MarginsConfig, MetadataConfig,
+        NumberingConfig, PageConfig, PageSize, Position, RulePosition, SyntaxTheme, TitlePageConfig,
+        TitlePageImagePosition, PDF,
     };
 }
 mod source;
@@ -39,8 +41,14 @@ fn try_main() -> Result<()> {
             println!("Loading configuration...");
             let contents = std::fs::read_to_string("src-book.toml")
                 .with_context(|| "Failed to load src-book.toml contents")?;
-            let config: Configuration =
+            let mut config: Configuration =
                 toml::from_str(&contents).with_context(|| "Failed to parse TOML")?;
+
+            // apply legacy field migrations
+            config.source.apply_legacy_fields();
+            if let Some(ref mut pdf) = config.pdf {
+                pdf.apply_legacy_fields();
+            }
 
             let Configuration { source, pdf } = config;
 
@@ -63,13 +71,13 @@ fn try_main() -> Result<()> {
                 println!("  Main PDF:    {}", pdf.outfile.display());
 
                 if let (Some(booklet_path), Some(sheets)) =
-                    (&pdf.booklet_outfile, stats.booklet_sheets)
+                    (pdf.booklet_outfile_path(), stats.booklet_sheets)
                 {
                     println!("  Booklet PDF: {}\n", booklet_path.display());
 
                     let booklet_pages = stats.page_count / 2 + stats.page_count % 2;
-                    let sheets_per_sig = pdf.booklet_signature_size / 4;
-                    let booklet_pages_per_sig = pdf.booklet_signature_size / 2;
+                    let sheets_per_sig = pdf.booklet.signature_size / 4;
+                    let booklet_pages_per_sig = pdf.booklet.signature_size / 2;
 
                     println!("Booklet info:");
                     println!("  Original pages:   {}", stats.page_count);
@@ -83,14 +91,14 @@ fn try_main() -> Result<()> {
                     );
                     println!(
                         "  Signature size:   {} original pages ({} sheets per signature)\n",
-                        pdf.booklet_signature_size, sheets_per_sig
+                        pdf.booklet.signature_size, sheets_per_sig
                     );
 
                     println!("To print the booklet:");
                     println!("  1. Print double-sided, flip on short edge");
                     println!(
                         "  2. Print {} booklet pages at a time (one {}-page signature = {} sheets)",
-                        booklet_pages_per_sig, pdf.booklet_signature_size, sheets_per_sig
+                        booklet_pages_per_sig, pdf.booklet.signature_size, sheets_per_sig
                     );
                     println!(
                         "  3. For each signature: nest the {} sheets together and fold in half",

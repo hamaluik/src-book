@@ -268,10 +268,10 @@ pub fn expand_template(template: &str, source: &Source, stats: &ColophonStats) -
         .collect::<Vec<_>>()
         .join("\n");
 
-    let licences = if source.licenses.is_empty() {
+    let licences = if source.licences.is_empty() {
         "No licence specified".to_string()
     } else {
-        source.licenses.join(", ")
+        source.licences.join(", ")
     };
 
     let generated_date = chrono::Local::now().format("%Y-%m-%d").to_string();
@@ -312,23 +312,23 @@ pub fn render(
     source: &Source,
     stats: &ColophonStats,
 ) -> Result<usize> {
-    if config.colophon_template.is_empty() {
+    if config.colophon.template.is_empty() {
         return Ok(0);
     }
 
-    let content = expand_template(&config.colophon_template, source, stats);
+    let content = expand_template(&config.colophon.template, source, stats);
     let lines: Vec<&str> = content.lines().collect();
 
     let page_size = config.page_size();
-    let font_size = Pt(config.font_size_body_pt);
-    let small_size = Pt(config.font_size_small_pt);
+    let font_size = Pt(config.fonts.body_pt);
+    let small_size = Pt(config.fonts.small_pt);
     let line_height = doc.fonts[font_ids.regular].line_height(font_size);
     let small_line_height = doc.fonts[font_ids.regular].line_height(small_size);
 
     // calculate usable area
-    let margin_top = Pt(config.margin_top_in * 72.0);
-    let margin_bottom = Pt(config.margin_bottom_in * 72.0);
-    let margin_left = Pt(config.margin_inner_in * 72.0);
+    let margin_top = Pt(config.margins.top_in * 72.0);
+    let margin_bottom = Pt(config.margins.bottom_in * 72.0);
+    let margin_left = Pt(config.margins.inner_in * 72.0);
     let usable_height = page_size.1 - margin_top - margin_bottom;
 
     // centre content vertically on the first page

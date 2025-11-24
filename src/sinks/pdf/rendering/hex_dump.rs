@@ -127,9 +127,9 @@ pub fn render(
         };
     }
 
-    let hex_size = Pt(config.font_size_hex_pt);
-    let subheading_size = Pt(config.font_size_subheading_pt);
-    let text_size = Pt(config.font_size_body_pt);
+    let hex_size = Pt(config.binary_hex.font_size_pt);
+    let subheading_size = Pt(config.fonts.subheading_pt);
+    let text_size = Pt(config.fonts.body_pt);
 
     // sanity check: ensure at least one byte (2 hex chars) fits per line
     let page_size = config.page_size();
@@ -160,7 +160,7 @@ pub fn render(
 
     // add truncation notice if needed (on its own line)
     if truncated {
-        let max_kb = config.binary_hex_max_bytes.unwrap_or(65536) / 1024;
+        let max_kb = config.binary_hex.max_bytes.unwrap_or(65536) / 1024;
         // two newlines: one to end the hex line, one for spacing
         text.push((
             "\n\n".to_string(),

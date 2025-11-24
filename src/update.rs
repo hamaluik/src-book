@@ -143,10 +143,10 @@ pub fn run() -> Result<()> {
     discovered_files.retain(|f| !frontmatter_set.contains(f));
 
     // handle entrypoint
-    let entrypoint = if let Some(ref ep) = source.entrypoint {
-        if discovered_files.contains(ep) {
+    let entrypoint = if let Some(ep) = source.entrypoint_path() {
+        if discovered_files.contains(&ep) {
             // entrypoint still exists
-            Some(ep.clone())
+            Some(ep)
         } else {
             // entrypoint was removed
             println!(
@@ -190,7 +190,9 @@ pub fn run() -> Result<()> {
     let source_count = discovered_files.len();
     source.frontmatter_files = frontmatter_files;
     source.source_files = discovered_files;
-    source.entrypoint = entrypoint;
+    source.entrypoint = entrypoint
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_default();
     let author_count = source.authors.len();
 
     // end mutable borrow before serialising

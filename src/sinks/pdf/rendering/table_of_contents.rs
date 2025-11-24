@@ -177,9 +177,9 @@ pub fn render(
     git_history_page: Option<usize>,
 ) -> Result<usize> {
     let page_size = config.page_size();
-    let contents_size = Pt(config.font_size_heading_pt);
-    let entry_size = Pt(config.font_size_body_pt);
-    let subheading_size = Pt(config.font_size_subheading_pt);
+    let contents_size = Pt(config.fonts.heading_pt);
+    let entry_size = Pt(config.fonts.body_pt);
+    let subheading_size = Pt(config.fonts.subheading_pt);
 
     let height_contents = doc.fonts[font_ids.bold].line_height(contents_size);
     let height_entry = doc.fonts[font_ids.regular].line_height(entry_size);

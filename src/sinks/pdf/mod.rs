@@ -15,6 +15,8 @@ mod imposition;
 mod rendering;
 
 pub use config::{
-    default_colophon_template, default_title_page_template, PageSize, Position, RulePosition,
-    SyntaxTheme, TitlePageImagePosition, PDF,
+    default_colophon_template, default_title_page_template, BinaryHexConfig, BookletConfig,
+    ColophonConfig, FontSizesConfig, FooterConfig, HeaderConfig, MarginsConfig, MetadataConfig,
+    NumberingConfig, PageConfig, PageSize, Position, RulePosition, SyntaxTheme, TitlePageConfig,
+    TitlePageImagePosition, PDF,
 };

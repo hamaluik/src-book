@@ -56,13 +56,13 @@ pub fn render_booklet(
     image_paths: &ImagePathMap,
     output_path: &PathBuf,
 ) -> Result<usize> {
-    let page_width = Pt(config.page_width_in * 72.0);
-    let page_height = Pt(config.page_height_in * 72.0);
-    let sheet_width = Pt(config.booklet_sheet_width_in * 72.0);
-    let sheet_height = Pt(config.booklet_sheet_height_in * 72.0);
+    let page_width = Pt(config.page.width_in * 72.0);
+    let page_height = Pt(config.page.height_in * 72.0);
+    let sheet_width = Pt(config.booklet.sheet_width_in * 72.0);
+    let sheet_height = Pt(config.booklet.sheet_height_in * 72.0);
 
     let booklet_config = BookletConfig {
-        signature_size: config.booklet_signature_size,
+        signature_size: config.booklet.signature_size,
         sheet_width,
         sheet_height,
         page_width,
@@ -86,10 +86,10 @@ pub fn render_booklet(
     if !authors.trim().is_empty() {
         info.author(authors);
     }
-    if let Some(subject) = &config.subject {
+    if let Some(subject) = config.subject_opt() {
         info.subject(subject);
     }
-    if let Some(keywords) = &config.keywords {
+    if let Some(keywords) = config.keywords_opt() {
         info.keywords(keywords);
     }
     info.creator(concat!("src-book v", env!("CARGO_PKG_VERSION")));
@@ -188,7 +188,7 @@ pub fn render_booklet(
 
     // calculate imposition layout
     let total_pages = page_xobjs.len();
-    let sheets = calculate_imposition(total_pages, config.booklet_signature_size);
+    let sheets = calculate_imposition(total_pages, config.booklet.signature_size);
 
     let sheet_count = sheets.len();
 

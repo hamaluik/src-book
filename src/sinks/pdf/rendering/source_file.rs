@@ -28,7 +28,7 @@ pub struct RenderResult {
 ///
 /// Text files are rendered with line numbers and syntax highlighting based on file
 /// extension. Binary files (detected by UTF-8 decode failure) are either rendered
-/// as hex dumps (when `config.render_binary_hex` is enabled) or shown as a grey
+/// as hex dumps (when `config.binary_hex.enabled` is enabled) or shown as a grey
 /// placeholder.
 ///
 /// Returns the first page index and number of pages rendered.
@@ -40,20 +40,20 @@ pub fn render(
     ss: &SyntaxSet,
     theme: &syntect::highlighting::Theme,
 ) -> Result<RenderResult> {
-    let text_size = Pt(config.font_size_body_pt);
-    let small_size = Pt(config.font_size_small_pt);
-    let subheading_size = Pt(config.font_size_subheading_pt);
+    let text_size = Pt(config.fonts.body_pt);
+    let small_size = Pt(config.fonts.small_pt);
+    let subheading_size = Pt(config.fonts.subheading_pt);
 
     // read the contents, or handle binary files
     let (contents, is_binary) = match std::fs::read_to_string(path) {
         Ok(contents) => (contents.replace("    ", "  "), false),
         Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
             // binary file - check if we should render as hex
-            if config.render_binary_hex {
+            if config.binary_hex.enabled {
                 let data = std::fs::read(path)
                     .with_context(|| format!("Failed to read binary file {}", path.display()))?;
 
-                let max_bytes = config.binary_hex_max_bytes.unwrap_or(usize::MAX);
+                let max_bytes = config.binary_hex.max_bytes.unwrap_or(usize::MAX);
                 let truncated = data.len() > max_bytes;
                 let data = if truncated {
                     &data[..max_bytes]
