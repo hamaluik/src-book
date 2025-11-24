@@ -15,17 +15,12 @@ mod toc;
 use super::config::{RenderStats, EPUB};
 use super::styles;
 use crate::source::{CommitOrder, Source};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use epub_builder::{EpubBuilder, EpubContent, ReferenceType, ZipLibrary};
 use indicatif::ProgressBar;
 use std::fs::File;
 use std::io::BufWriter;
 use syntect::parsing::SyntaxSet;
-
-/// Convert epub-builder's eyre::Report to anyhow::Error.
-fn epub_err<T>(result: std::result::Result<T, eyre::Report>) -> Result<T> {
-    result.map_err(|e| anyhow!("{}", e))
-}
 
 impl EPUB {
     /// Render the source repository to an EPUB file.
@@ -47,41 +42,61 @@ impl EPUB {
         let stylesheet = styles::generate_stylesheet(&theme, &self.fonts.family);
 
         // create epub builder
-        let zip = epub_err(ZipLibrary::new())?;
-        let mut builder = epub_err(EpubBuilder::new(zip))?;
+        let zip = ZipLibrary::new().with_context(|| "Failed to create ZIP library for EPUB")?;
+        let mut builder = EpubBuilder::new(zip).with_context(|| "Failed to build builder")?;
 
         // set metadata
-        let title = source.title.clone().unwrap_or_else(|| "Untitled".to_string());
-        epub_err(builder.metadata("title", &title))?;
-        epub_err(builder.metadata("generator", "src-book"))?;
-        epub_err(builder.metadata("lang", &self.metadata.language))?;
+        // TODO: allow setting metadata to be fallible
+        let title = source
+            .title
+            .clone()
+            .unwrap_or_else(|| "Untitled".to_string());
+        builder
+            .metadata("title", &title)
+            .with_context(|| "Failed to set title metadata")?;
+        builder
+            .metadata("generator", "src-book")
+            .with_context(|| "Failed to set generator metadata")?;
+        builder
+            .metadata("lang", &self.metadata.language)
+            .with_context(|| "Failed to set language metadata")?;
 
         // add authors
         for author in &source.authors {
-            epub_err(builder.metadata("author", author.to_string()))?;
+            builder
+                .metadata("author", author.to_string())
+                .with_context(|| format!("Failed to add author metadata for author: {}", author))?;
         }
 
         // add optional metadata
         if let Some(subject) = self.subject_opt() {
-            epub_err(builder.metadata("description", subject))?;
+            builder
+                .metadata("description", subject)
+                .with_context(|| "Failed to set description metadata")?;
         }
         if let Some(keywords) = self.keywords_opt() {
-            epub_err(builder.metadata("subject", keywords))?;
+            builder
+                .metadata("subject", keywords)
+                .with_context(|| "Failed to set subject (keywords) metadata")?;
         }
 
         // add stylesheet
-        epub_err(builder.stylesheet(stylesheet.as_bytes()))?;
+        builder
+            .stylesheet(stylesheet.as_bytes())
+            .with_context(|| "Failed to add stylesheet")?;
 
         // track document count for stats
         let mut document_count = 0;
 
         // add cover page
         let cover_html = cover::render(self, source)?;
-        epub_err(builder.add_content(
-            EpubContent::new("cover.xhtml", cover_html.as_bytes())
-                .title("Cover")
-                .reftype(ReferenceType::Cover),
-        ))?;
+        builder
+            .add_content(
+                EpubContent::new("cover.xhtml", cover_html.as_bytes())
+                    .title("Cover")
+                    .reftype(ReferenceType::Cover),
+            )
+            .with_context(|| "Failed to add cover page")?;
         document_count += 1;
 
         // add cover image if configured
@@ -93,27 +108,38 @@ impl EPUB {
                 .file_name()
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_else(|| "cover-image".to_string());
-            epub_err(builder.add_cover_image(&filename, image_data.as_slice(), mime))?;
+            builder
+                .add_cover_image(&filename, image_data.as_slice(), mime)
+                .with_context(|| {
+                    format!(
+                        "Failed to add cover image to EPUB: {}",
+                        cover_path.display()
+                    )
+                })?;
         }
 
         // add colophon if configured
         if !self.colophon.template.is_empty() {
             let colophon_html = colophon::render(self, source)?;
-            epub_err(builder.add_content(
-                EpubContent::new("colophon.xhtml", colophon_html.as_bytes())
-                    .title("Colophon")
-                    .reftype(ReferenceType::Colophon),
-            ))?;
+            builder
+                .add_content(
+                    EpubContent::new("colophon.xhtml", colophon_html.as_bytes())
+                        .title("Colophon")
+                        .reftype(ReferenceType::Colophon),
+                )
+                .with_context(|| "Failed to add colophon page")?;
             document_count += 1;
         }
 
         // add table of contents page
         let toc_html = toc::render(source)?;
-        epub_err(builder.add_content(
-            EpubContent::new("toc.xhtml", toc_html.as_bytes())
-                .title("Table of Contents")
-                .reftype(ReferenceType::Toc),
-        ))?;
+        builder
+            .add_content(
+                EpubContent::new("toc.xhtml", toc_html.as_bytes())
+                    .title("Table of Contents")
+                    .reftype(ReferenceType::Toc),
+            )
+            .with_context(|| "Failed to add table of contents page")?;
         document_count += 1;
 
         // add frontmatter files
@@ -124,7 +150,14 @@ impl EPUB {
             let title = path.display().to_string();
 
             let html = source_file::render(&file_path, &title, &ss, &theme)?;
-            epub_err(builder.add_content(EpubContent::new(&filename, html.as_bytes()).title(&title)))?;
+            builder
+                .add_content(EpubContent::new(&filename, html.as_bytes()).title(&title))
+                .with_context(|| {
+                    format!(
+                        "Failed to add frontmatter file to EPUB: {}",
+                        file_path.display()
+                    )
+                })?;
             document_count += 1;
         }
 
@@ -136,16 +169,23 @@ impl EPUB {
             let title = path.display().to_string();
 
             let html = source_file::render(&file_path, &title, &ss, &theme)?;
-            epub_err(builder.add_content(EpubContent::new(&filename, html.as_bytes()).title(&title)))?;
+            builder
+                .add_content(EpubContent::new(&filename, html.as_bytes()).title(&title))
+                .with_context(|| {
+                    format!("Failed to add source file to EPUB: {}", file_path.display())
+                })?;
             document_count += 1;
         }
 
         // add commit history if enabled
         if source.commit_order != CommitOrder::Disabled {
             let commits_html = commits::render(source)?;
-            epub_err(builder.add_content(
-                EpubContent::new("commits.xhtml", commits_html.as_bytes()).title("Commit History"),
-            ))?;
+            builder
+                .add_content(
+                    EpubContent::new("commits.xhtml", commits_html.as_bytes())
+                        .title("Commit History"),
+                )
+                .with_context(|| "Failed to add commit history page")?;
             document_count += 1;
         }
 
@@ -153,7 +193,9 @@ impl EPUB {
         let output_file = File::create(&self.outfile)
             .with_context(|| format!("Failed to create EPUB file: {}", self.outfile.display()))?;
         let writer = BufWriter::new(output_file);
-        epub_err(builder.generate(writer))?;
+        builder
+            .generate(writer)
+            .with_context(|| "Failed to generate EPUB file")?;
 
         progress.finish_with_message("EPUB generated");
 

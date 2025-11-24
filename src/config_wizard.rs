@@ -72,8 +72,8 @@ pub struct Configuration {
 /// Used by `--config-from` to apply a "golden" config's PDF settings to a new repository.
 /// The template's source file lists are ignored; only PDF settings are preserved.
 fn load_template(path: &PathBuf) -> Result<Configuration> {
-    let contents =
-        std::fs::read_to_string(path).with_context(|| format!("failed to read {}", path.display()))?;
+    let contents = std::fs::read_to_string(path)
+        .with_context(|| format!("failed to read {}", path.display()))?;
     toml::from_str(&contents).with_context(|| format!("failed to parse {}", path.display()))
 }
 
@@ -177,11 +177,7 @@ fn print_theme_preview(theme: SyntaxTheme, ss: &SyntaxSet, ts: &ThemeSet) {
 /// Priority for PDF settings: `--output` flag > template > detected defaults
 pub fn run(args: &ConfigArgs) -> Result<()> {
     let non_interactive = args.yes || args.config_from.is_some();
-    let template = args
-        .config_from
-        .as_ref()
-        .map(load_template)
-        .transpose()?;
+    let template = args.config_from.as_ref().map(load_template).transpose()?;
 
     // load existing config to use as defaults (ignored when --config-from is used)
     let existing = if template.is_none() {
@@ -276,30 +272,30 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             .default(!block_globs.is_empty())
             .interact()?
         {
-        'block: loop {
-            if !block_globs.is_empty() {
-                println!(
-                    "Blocked globs: [{}]",
-                    block_globs
-                        .iter()
-                        .map(|gm| gm.glob().glob().to_string())
-                        .collect::<Vec<String>>()
-                        .join("], [")
-                );
-            }
-            let glob: String = Input::with_theme(&theme)
-                .with_prompt("Glob syntax of files you want to specifically block")
-                .allow_empty(true)
-                .interact()?;
-            if glob.trim().is_empty() {
-                break 'block;
-            }
+            'block: loop {
+                if !block_globs.is_empty() {
+                    println!(
+                        "Blocked globs: [{}]",
+                        block_globs
+                            .iter()
+                            .map(|gm| gm.glob().glob().to_string())
+                            .collect::<Vec<String>>()
+                            .join("], [")
+                    );
+                }
+                let glob: String = Input::with_theme(&theme)
+                    .with_prompt("Glob syntax of files you want to specifically block")
+                    .allow_empty(true)
+                    .interact()?;
+                if glob.trim().is_empty() {
+                    break 'block;
+                }
 
-            let glob = Glob::new(&glob)
-                .with_context(|| "Failed to parse glob!")?
-                .compile_matcher();
-            block_globs.push(glob);
-        }
+                let glob = Glob::new(&glob)
+                    .with_context(|| "Failed to parse glob!")?
+                    .compile_matcher();
+                block_globs.push(glob);
+            }
         }
     }
 
@@ -434,9 +430,7 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
         );
 
         // pre-select files that were in existing config, otherwise default to true
-        let existing_frontmatter = existing
-            .as_ref()
-            .map(|e| &e.source.frontmatter_files);
+        let existing_frontmatter = existing.as_ref().map(|e| &e.source.frontmatter_files);
         let defaults: Vec<bool> = detected_frontmatter
             .iter()
             .map(|f| {
@@ -585,7 +579,12 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             // priority: --output flag > template > default
             args.output
                 .clone()
-                .or_else(|| template.as_ref().and_then(|t| t.pdf.as_ref()).map(|p| p.outfile.clone()))
+                .or_else(|| {
+                    template
+                        .as_ref()
+                        .and_then(|t| t.pdf.as_ref())
+                        .map(|p| p.outfile.clone())
+                })
                 .unwrap_or_else(|| PathBuf::from("book.pdf"))
         } else {
             // use existing outfile as default
@@ -665,7 +664,10 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
                 .and_then(|p| {
                     PageSize::all().iter().position(|ps| {
                         ps.dimensions_in()
-                            .map(|(w, h)| (w - p.page.width_in).abs() < 0.01 && (h - p.page.height_in).abs() < 0.01)
+                            .map(|(w, h)| {
+                                (w - p.page.width_in).abs() < 0.01
+                                    && (h - p.page.height_in).abs() < 0.01
+                            })
                             .unwrap_or(false)
                     })
                 })
@@ -744,7 +746,9 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             let default_booklet_path = existing_pdf
                 .map(|p| p.booklet.outfile.clone())
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| outfile.with_extension("").to_string_lossy().to_string() + "-booklet.pdf");
+                .unwrap_or_else(|| {
+                    outfile.with_extension("").to_string_lossy().to_string() + "-booklet.pdf"
+                });
             let booklet_path: String = Input::with_theme(&theme)
                 .with_prompt("Booklet output file")
                 .default(default_booklet_path)
@@ -760,7 +764,13 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
                 template
                     .as_ref()
                     .and_then(|t| t.pdf.as_ref())
-                    .map(|p| (p.booklet.signature_size, p.booklet.sheet_width_in, p.booklet.sheet_height_in))
+                    .map(|p| {
+                        (
+                            p.booklet.signature_size,
+                            p.booklet.sheet_width_in,
+                            p.booklet.sheet_height_in,
+                        )
+                    })
                     .unwrap_or((16, 11.0, 8.5))
             } else if !booklet_outfile.is_empty() {
                 let default_sig_size = existing_pdf.map(|p| p.booklet.signature_size).unwrap_or(16);
@@ -776,7 +786,9 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
                     })
                     .interact()?;
 
-                let default_sheet_width = existing_pdf.map(|p| p.booklet.sheet_width_in).unwrap_or(11.0);
+                let default_sheet_width = existing_pdf
+                    .map(|p| p.booklet.sheet_width_in)
+                    .unwrap_or(11.0);
                 let sheet_width: f32 = Input::with_theme(&theme)
                     .with_prompt(
                         "Physical sheet width in inches (e.g., 11.0 for US Letter landscape)",
@@ -784,7 +796,9 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
                     .default(default_sheet_width)
                     .interact()?;
 
-                let default_sheet_height = existing_pdf.map(|p| p.booklet.sheet_height_in).unwrap_or(8.5);
+                let default_sheet_height = existing_pdf
+                    .map(|p| p.booklet.sheet_height_in)
+                    .unwrap_or(8.5);
                 let sheet_height: f32 = Input::with_theme(&theme)
                     .with_prompt(
                         "Physical sheet height in inches (e.g., 8.5 for US Letter landscape)",
@@ -842,7 +856,9 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
                 Some(max_kb as usize * 1024)
             };
 
-            let default_hex_font = existing_pdf.map(|p| p.binary_hex.font_size_pt).unwrap_or(5.0);
+            let default_hex_font = existing_pdf
+                .map(|p| p.binary_hex.font_size_pt)
+                .unwrap_or(5.0);
             let hex_font_size: f32 = Input::with_theme(&theme)
                 .with_prompt("Font size for hex dump in points")
                 .default(default_hex_font)
@@ -866,22 +882,26 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             template
                 .as_ref()
                 .and_then(|t| t.pdf.as_ref())
-                .map(|p| (
-                    p.header.template.clone(),
-                    p.header.position,
-                    p.header.rule,
-                    p.footer.template.clone(),
-                    p.footer.position,
-                    p.footer.rule,
-                ))
-                .unwrap_or_else(|| (
-                    "{file}".to_string(),
-                    Position::Outer,
-                    RulePosition::Below,
-                    "{n}".to_string(),
-                    Position::Outer,
-                    RulePosition::None,
-                ))
+                .map(|p| {
+                    (
+                        p.header.template.clone(),
+                        p.header.position,
+                        p.header.rule,
+                        p.footer.template.clone(),
+                        p.footer.position,
+                        p.footer.rule,
+                    )
+                })
+                .unwrap_or_else(|| {
+                    (
+                        "{file}".to_string(),
+                        Position::Outer,
+                        RulePosition::Below,
+                        "{n}".to_string(),
+                        Position::Outer,
+                        RulePosition::None,
+                    )
+                })
         } else if Confirm::with_theme(&theme)
             .with_prompt("Customise headers and footers?")
             .default(existing_pdf.is_some())
@@ -900,7 +920,11 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
 
             let header_position = if !header_template.is_empty() {
                 let default_pos_idx = existing_pdf
-                    .and_then(|p| Position::all().iter().position(|&pos| pos == p.header.position))
+                    .and_then(|p| {
+                        Position::all()
+                            .iter()
+                            .position(|&pos| pos == p.header.position)
+                    })
                     .unwrap_or(0);
                 let pos_idx = FuzzySelect::with_theme(&theme)
                     .with_prompt("Header position")
@@ -937,7 +961,11 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
 
             let footer_position = if !footer_template.is_empty() {
                 let default_pos_idx = existing_pdf
-                    .and_then(|p| Position::all().iter().position(|&pos| pos == p.footer.position))
+                    .and_then(|p| {
+                        Position::all()
+                            .iter()
+                            .position(|&pos| pos == p.footer.position)
+                    })
                     .unwrap_or(0);
                 let pos_idx = FuzzySelect::with_theme(&theme)
                     .with_prompt("Footer position")
@@ -1061,138 +1089,149 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
         // In interactive mode, users can customise layout and add logos/cover art.
         // In non-interactive mode, use template settings or sensible defaults.
         // The dimension calculation helps users understand monospace block limits.
-        let (title_page_template, title_page_image, title_page_image_position, title_page_image_max_height_in) =
-            if non_interactive {
-                let template_pdf = template.as_ref().and_then(|t| t.pdf.as_ref());
-                (
-                    template_pdf
-                        .map(|p| p.title_page.template.clone())
-                        .unwrap_or_else(crate::sinks::default_title_page_template),
-                    template_pdf.map(|p| p.title_page.image.clone()).unwrap_or_default(),
-                    template_pdf
-                        .map(|p| p.title_page.image_position)
-                        .unwrap_or_default(),
-                    template_pdf
-                        .map(|p| p.title_page.image_max_height_in)
-                        .unwrap_or(2.0),
-                )
-            } else {
-                // check if existing config has customisations
-                let existing_title_page = existing_pdf.map(|p| &p.title_page);
-                let has_custom_title_page = existing_title_page
-                    .map(|tp| {
-                        tp.template != crate::sinks::default_title_page_template()
-                            || !tp.image.is_empty()
-                    })
-                    .unwrap_or(false);
+        let (
+            title_page_template,
+            title_page_image,
+            title_page_image_position,
+            title_page_image_max_height_in,
+        ) = if non_interactive {
+            let template_pdf = template.as_ref().and_then(|t| t.pdf.as_ref());
+            (
+                template_pdf
+                    .map(|p| p.title_page.template.clone())
+                    .unwrap_or_else(crate::sinks::default_title_page_template),
+                template_pdf
+                    .map(|p| p.title_page.image.clone())
+                    .unwrap_or_default(),
+                template_pdf
+                    .map(|p| p.title_page.image_position)
+                    .unwrap_or_default(),
+                template_pdf
+                    .map(|p| p.title_page.image_max_height_in)
+                    .unwrap_or(2.0),
+            )
+        } else {
+            // check if existing config has customisations
+            let existing_title_page = existing_pdf.map(|p| &p.title_page);
+            let has_custom_title_page = existing_title_page
+                .map(|tp| {
+                    tp.template != crate::sinks::default_title_page_template()
+                        || !tp.image.is_empty()
+                })
+                .unwrap_or(false);
 
-                if Confirm::with_theme(&theme)
-                    .with_prompt("Customise title page layout?")
-                    .default(has_custom_title_page)
+            if Confirm::with_theme(&theme)
+                .with_prompt("Customise title page layout?")
+                .default(has_custom_title_page)
+                .interact()?
+            {
+                println!("Available placeholders:");
+                println!("  {{title}}    - Book title (rendered in title font)");
+                println!("  {{authors}}  - Author list (one per line)");
+                println!("  {{licences}} - Licence identifiers");
+                println!("  {{date}}     - Current date (YYYY-MM-DD)");
+                println!();
+                println!("Use ``` fences for monospace blocks (ASCII art, sample output):");
+                println!("  ```");
+                println!("  Your monospace text here");
+                println!("  ```");
+                println!();
+                // calculate approximate max dimensions for monospace blocks
+                // monospace character width is ~0.6 of font size
+                let char_width_pt = font_size_body_pt * 0.6;
+                let page_width_pt = page_width_in * 72.0;
+                let max_chars = (page_width_pt / char_width_pt).floor() as usize;
+                // height: estimate usable space after title/authors (rough approximation)
+                let page_height_pt = page_height_in * 72.0;
+                let title_space_pt = font_size_title_pt * 1.2 * 2.0; // title + spacing
+                let author_estimate_pt = font_size_body_pt * 1.2 * 4.0; // ~4 lines for authors
+                let line_height_pt = font_size_body_pt * 1.2;
+                let usable_height_pt = page_height_pt - title_space_pt - author_estimate_pt - 72.0; // 1" margin
+                let max_lines = (usable_height_pt / line_height_pt).floor() as usize;
+                println!(
+                    "Monospace block limits: ~{} chars wide, ~{} lines tall (approximate)",
+                    max_chars, max_lines
+                );
+
+                let default_template = existing_title_page
+                    .map(|tp| tp.template.clone())
+                    .unwrap_or_else(crate::sinks::default_title_page_template);
+                println!("\nDefault template:");
+                println!("---");
+                println!("{}", default_template);
+                println!("---");
+
+                let custom_template: String = Input::with_theme(&theme)
+                    .with_prompt("Enter custom template (or press Enter for default)")
+                    .default(default_template)
+                    .allow_empty(true)
+                    .interact()?;
+
+                // image configuration
+                let existing_has_image = existing_title_page
+                    .map(|tp| !tp.image.is_empty())
+                    .unwrap_or(false);
+                let (image_path, image_position, image_max_height) = if Confirm::with_theme(&theme)
+                    .with_prompt("Add an image to the title page?")
+                    .default(existing_has_image)
                     .interact()?
                 {
-                    println!("Available placeholders:");
-                    println!("  {{title}}    - Book title (rendered in title font)");
-                    println!("  {{authors}}  - Author list (one per line)");
-                    println!("  {{licences}} - Licence identifiers");
-                    println!("  {{date}}     - Current date (YYYY-MM-DD)");
-                    println!();
-                    println!("Use ``` fences for monospace blocks (ASCII art, sample output):");
-                    println!("  ```");
-                    println!("  Your monospace text here");
-                    println!("  ```");
-                    println!();
-                    // calculate approximate max dimensions for monospace blocks
-                    // monospace character width is ~0.6 of font size
-                    let char_width_pt = font_size_body_pt * 0.6;
-                    let page_width_pt = page_width_in * 72.0;
-                    let max_chars = (page_width_pt / char_width_pt).floor() as usize;
-                    // height: estimate usable space after title/authors (rough approximation)
-                    let page_height_pt = page_height_in * 72.0;
-                    let title_space_pt = font_size_title_pt * 1.2 * 2.0; // title + spacing
-                    let author_estimate_pt = font_size_body_pt * 1.2 * 4.0; // ~4 lines for authors
-                    let line_height_pt = font_size_body_pt * 1.2;
-                    let usable_height_pt = page_height_pt - title_space_pt - author_estimate_pt - 72.0; // 1" margin
-                    let max_lines = (usable_height_pt / line_height_pt).floor() as usize;
-                    println!(
-                        "Monospace block limits: ~{} chars wide, ~{} lines tall (approximate)",
-                        max_chars, max_lines
-                    );
-
-                    let default_template = existing_title_page
-                        .map(|tp| tp.template.clone())
-                        .unwrap_or_else(crate::sinks::default_title_page_template);
-                    println!("\nDefault template:");
-                    println!("---");
-                    println!("{}", default_template);
-                    println!("---");
-
-                    let custom_template: String = Input::with_theme(&theme)
-                        .with_prompt("Enter custom template (or press Enter for default)")
-                        .default(default_template)
-                        .allow_empty(true)
+                    let default_image_path = existing_title_page
+                        .map(|tp| tp.image.clone())
+                        .unwrap_or_default();
+                    let path: String = Input::with_theme(&theme)
+                        .with_prompt("Image path (relative or absolute)")
+                        .default(default_image_path)
                         .interact()?;
 
-                    // image configuration
-                    let existing_has_image = existing_title_page
-                        .map(|tp| !tp.image.is_empty())
-                        .unwrap_or(false);
-                    let (image_path, image_position, image_max_height) = if Confirm::with_theme(&theme)
-                        .with_prompt("Add an image to the title page?")
-                        .default(existing_has_image)
-                        .interact()?
-                    {
-                        let default_image_path = existing_title_page
-                            .map(|tp| tp.image.clone())
-                            .unwrap_or_default();
-                        let path: String = Input::with_theme(&theme)
-                            .with_prompt("Image path (relative or absolute)")
-                            .default(default_image_path)
-                            .interact()?;
+                    let positions = TitlePageImagePosition::all();
+                    let default_pos_idx = existing_title_page
+                        .and_then(|tp| positions.iter().position(|&p| p == tp.image_position))
+                        .unwrap_or(0);
+                    let position_idx = Select::with_theme(&theme)
+                        .with_prompt("Image position")
+                        .items(positions)
+                        .default(default_pos_idx)
+                        .interact()?;
+                    let position = positions[position_idx];
 
-                        let positions = TitlePageImagePosition::all();
-                        let default_pos_idx = existing_title_page
-                            .and_then(|tp| positions.iter().position(|&p| p == tp.image_position))
-                            .unwrap_or(0);
-                        let position_idx = Select::with_theme(&theme)
-                            .with_prompt("Image position")
-                            .items(positions)
-                            .default(default_pos_idx)
-                            .interact()?;
-                        let position = positions[position_idx];
+                    let default_max_height = existing_title_page
+                        .map(|tp| tp.image_max_height_in)
+                        .unwrap_or(2.0);
+                    let max_height: f32 = Input::with_theme(&theme)
+                        .with_prompt("Maximum image height (inches)")
+                        .default(default_max_height)
+                        .interact()?;
 
-                        let default_max_height = existing_title_page
-                            .map(|tp| tp.image_max_height_in)
-                            .unwrap_or(2.0);
-                        let max_height: f32 = Input::with_theme(&theme)
-                            .with_prompt("Maximum image height (inches)")
-                            .default(default_max_height)
-                            .interact()?;
-
-                        (path, position, max_height)
-                    } else {
-                        (String::new(), TitlePageImagePosition::default(), 2.0)
-                    };
-
-                    (custom_template, image_path, image_position, image_max_height)
+                    (path, position, max_height)
                 } else {
-                    // use existing values if available, otherwise defaults
-                    (
-                        existing_title_page
-                            .map(|tp| tp.template.clone())
-                            .unwrap_or_else(crate::sinks::default_title_page_template),
-                        existing_title_page
-                            .map(|tp| tp.image.clone())
-                            .unwrap_or_default(),
-                        existing_title_page
-                            .map(|tp| tp.image_position)
-                            .unwrap_or_default(),
-                        existing_title_page
-                            .map(|tp| tp.image_max_height_in)
-                            .unwrap_or(2.0),
-                    )
-                }
-            };
+                    (String::new(), TitlePageImagePosition::default(), 2.0)
+                };
+
+                (
+                    custom_template,
+                    image_path,
+                    image_position,
+                    image_max_height,
+                )
+            } else {
+                // use existing values if available, otherwise defaults
+                (
+                    existing_title_page
+                        .map(|tp| tp.template.clone())
+                        .unwrap_or_else(crate::sinks::default_title_page_template),
+                    existing_title_page
+                        .map(|tp| tp.image.clone())
+                        .unwrap_or_default(),
+                    existing_title_page
+                        .map(|tp| tp.image_position)
+                        .unwrap_or_default(),
+                    existing_title_page
+                        .map(|tp| tp.image_max_height_in)
+                        .unwrap_or(2.0),
+                )
+            }
+        };
 
         // PDF document metadata (subject and keywords) for the document info dictionary.
         // these appear in PDF viewers under "Properties" and can help with organisation.
@@ -1233,8 +1272,12 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
         } else {
             // preserve existing metadata if not customising
             (
-                existing_pdf.map(|p| p.metadata.subject.clone()).unwrap_or_default(),
-                existing_pdf.map(|p| p.metadata.keywords.clone()).unwrap_or_default(),
+                existing_pdf
+                    .map(|p| p.metadata.subject.clone())
+                    .unwrap_or_default(),
+                existing_pdf
+                    .map(|p| p.metadata.keywords.clone())
+                    .unwrap_or_default(),
             )
         };
 
@@ -1294,10 +1337,7 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
     let existing_epub = existing.as_ref().and_then(|e| e.epub.as_ref());
     let should_render_epub = if non_interactive {
         // in non-interactive mode, disable EPUB by default unless template has it
-        template
-            .as_ref()
-            .and_then(|t| t.epub.as_ref())
-            .is_some()
+        template.as_ref().and_then(|t| t.epub.as_ref()).is_some()
     } else {
         Confirm::with_theme(&theme)
             .with_prompt("Do you want to render to EPUB?")

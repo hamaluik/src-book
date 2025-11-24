@@ -71,9 +71,7 @@ fn render_hierarchical_toc(files: &[std::path::PathBuf]) -> String {
 
     for (i, path) in files.iter().enumerate() {
         let parent = path.parent().unwrap_or(Path::new(""));
-        tree.entry(parent)
-            .or_default()
-            .push((i, path.as_path()));
+        tree.entry(parent).or_default().push((i, path.as_path()));
     }
 
     let mut html = String::new();

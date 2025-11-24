@@ -8,6 +8,7 @@
 use crate::sinks::epub::config::EPUB;
 use crate::source::Source;
 use anyhow::Result;
+use jiff::Zoned;
 
 /// Render the cover page as XHTML.
 pub fn render(config: &EPUB, source: &Source) -> Result<String> {
@@ -22,7 +23,7 @@ pub fn render(config: &EPUB, source: &Source) -> Result<String> {
         .collect::<Vec<_>>()
         .join(", ");
     let licences = source.licences.join(", ");
-    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let date = Zoned::now().strftime("%Y-%m-%d").to_string();
 
     // expand template
     let content = config

@@ -55,8 +55,9 @@ pub fn render(
                 span_font_normal,
             ));
         }
+        let date_str = jiff::fmt::rfc2822::to_string(&date).unwrap_or_else(|_| date.to_string());
         text.push((
-            format!("         {}\n", date.to_rfc2822()),
+            format!("         {}\n", date_str),
             Colour::new_rgb_bytes(121, 116, 14),
             span_font_normal,
         ));

@@ -116,8 +116,9 @@ impl PDF {
         // render colophon if enabled (before the blank page)
         let commits_for_stats = source.commits().unwrap_or_default();
         let colophon_stats = colophon::compute_stats(source, &commits_for_stats);
-        let colophon_page_count = colophon::render(self, &mut doc, &font_ids, source, &colophon_stats)
-            .with_context(|| "Failed to render colophon page")?;
+        let colophon_page_count =
+            colophon::render(self, &mut doc, &font_ids, source, &colophon_stats)
+                .with_context(|| "Failed to render colophon page")?;
 
         // add a blank page after title/colophon so we start on the right (if odd page count)
         let pages_so_far = 1 + colophon_page_count; // title + colophon

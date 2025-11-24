@@ -22,15 +22,15 @@ mod file_ordering;
 mod formatting;
 mod highlight;
 mod sinks {
-    pub mod pdf;
     pub mod epub;
+    pub mod pdf;
+    pub use epub::EPUB;
     pub use pdf::{
         default_colophon_template, default_title_page_template, BinaryHexConfig, BookletConfig,
         ColophonConfig, FontSizesConfig, FooterConfig, HeaderConfig, MarginsConfig, MetadataConfig,
-        NumberingConfig, PageConfig, PageSize, Position, RulePosition, SyntaxTheme, TitlePageConfig,
-        TitlePageImagePosition, PDF,
+        NumberingConfig, PageConfig, PageSize, Position, RulePosition, SyntaxTheme,
+        TitlePageConfig, TitlePageImagePosition, PDF,
     };
-    pub use epub::EPUB;
 }
 mod source;
 mod update;

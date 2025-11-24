@@ -1,5 +1,13 @@
+//! Git commit metadata for the commit history section.
+//!
+//! Extracts commit information from git2 and converts timestamps to timezone-aware
+//! `jiff::Zoned` values, preserving the author's original timezone offset for display.
+
 use super::Author;
-use chrono::prelude::*;
+use jiff::{
+    tz::{Offset, TimeZone},
+    Timestamp, Zoned,
+};
 use serde::{Deserialize, Serialize};
 
 /// Controls whether and how commit history appears in the generated book.
@@ -44,7 +52,8 @@ pub struct Commit {
     pub summary: Option<String>,
     /// Remaining lines of the commit message
     pub body: Option<String>,
-    pub date: DateTime<FixedOffset>,
+    /// Commit timestamp with timezone from the author's environment
+    pub date: Zoned,
     /// Full SHA-1 hash
     pub hash: String,
 }
@@ -62,12 +71,12 @@ impl From<&git2::Commit<'_>> for Commit {
         let body = c.body().map(ToString::to_string);
 
         let time = c.time();
-        let timezone = if time.offset_minutes() < 0 {
-            FixedOffset::west(time.offset_minutes().abs() * 60)
-        } else {
-            FixedOffset::east(time.offset_minutes() * 60)
-        };
-        let date = timezone.timestamp(time.seconds(), 0);
+        let offset = Offset::from_seconds(time.offset_minutes() * 60)
+            .expect("can create offset from git time");
+        let tz = TimeZone::fixed(offset);
+        let ts =
+            Timestamp::from_second(time.seconds()).expect("can create timestamp from git time");
+        let date = ts.to_zoned(tz);
 
         let hash = c.id().to_string();
 

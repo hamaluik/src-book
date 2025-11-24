@@ -9,6 +9,7 @@
 use crate::sinks::epub::config::EPUB;
 use crate::source::{CommitOrder, Source};
 use anyhow::Result;
+use jiff::Zoned;
 use std::collections::HashMap;
 
 /// Render the colophon page as XHTML.
@@ -45,7 +46,7 @@ pub fn render(config: &EPUB, source: &Source) -> Result<String> {
         .replace("{remotes}", &remotes)
         .replace(
             "{generated_date}",
-            &chrono::Local::now().format("%Y-%m-%d").to_string(),
+            &Zoned::now().strftime("%Y-%m-%d").to_string(),
         )
         .replace("{tool_version}", env!("CARGO_PKG_VERSION"))
         .replace("{file_count}", &stats.file_count.to_string())
@@ -181,8 +182,12 @@ fn compute_stats(source: &Source) -> ColophonStats {
     let date_range = if commits.is_empty() {
         "no commits".to_string()
     } else {
-        let first = commits.last().map(|c| c.date.format("%Y-%m-%d").to_string());
-        let last = commits.first().map(|c| c.date.format("%Y-%m-%d").to_string());
+        let first = commits
+            .last()
+            .map(|c| c.date.strftime("%Y-%m-%d").to_string());
+        let last = commits
+            .first()
+            .map(|c| c.date.strftime("%Y-%m-%d").to_string());
         match (first, last) {
             (Some(f), Some(l)) if f != l => format!("{} to {}", f, l),
             (Some(f), _) => f,
@@ -212,7 +217,7 @@ fn generate_commit_chart(commits: &[crate::source::Commit]) -> String {
     // group by month
     let mut monthly: HashMap<String, usize> = HashMap::new();
     for commit in commits {
-        let key = commit.date.format("%Y-%m").to_string();
+        let key = commit.date.strftime("%Y-%m").to_string();
         *monthly.entry(key).or_default() += 1;
     }
 

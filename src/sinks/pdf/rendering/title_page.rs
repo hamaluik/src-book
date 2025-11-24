@@ -36,6 +36,7 @@ use crate::sinks::pdf::fonts::FontIds;
 use crate::sinks::pdf::rendering::ImagePathMap;
 use crate::source::Source;
 use anyhow::Result;
+use jiff::Zoned;
 use pdf_gen::*;
 
 /// A segment of the title page template.
@@ -55,7 +56,10 @@ enum TemplateSegment {
 /// - `{licences}` - Comma-separated licence identifiers
 /// - `{date}` - Current date in YYYY-MM-DD format
 fn expand_template(template: &str, source: &Source) -> String {
-    let title = source.title.clone().unwrap_or_else(|| "untitled".to_string());
+    let title = source
+        .title
+        .clone()
+        .unwrap_or_else(|| "untitled".to_string());
 
     let mut authors = source.authors.clone();
     authors.sort();
@@ -71,7 +75,7 @@ fn expand_template(template: &str, source: &Source) -> String {
         source.licences.join(", ")
     };
 
-    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let date = Zoned::now().strftime("%Y-%m-%d").to_string();
 
     template
         .replace("{title}", &title)
@@ -206,7 +210,17 @@ pub fn render(
 
     // expand template and parse into segments
     // temporarily mark title for identification after expansion
-    let template = config.title_page.template.replace("{title}", &format!("{}\n{}", source_title_marker(), source.title.clone().unwrap_or_else(|| "untitled".to_string())));
+    let template = config.title_page.template.replace(
+        "{title}",
+        &format!(
+            "{}\n{}",
+            source_title_marker(),
+            source
+                .title
+                .clone()
+                .unwrap_or_else(|| "untitled".to_string())
+        ),
+    );
     let content = expand_template(&template, source);
     let segments = parse_segments(&content);
 
@@ -229,14 +243,18 @@ pub fn render(
         TitlePageImagePosition::Centre => {
             // image in centre, text above and below (text flows around)
             // for simplicity, put image in centre of page, text above it
-            let image_y = image_data.as_ref().map(|(_, _, h)| (page_size.1 + *h) / 2.0 - *h);
+            let image_y = image_data
+                .as_ref()
+                .map(|(_, _, h)| (page_size.1 + *h) / 2.0 - *h);
             let text_y = (page_size.1 + total_height) / 2.0;
             (image_y, text_y)
         }
         TitlePageImagePosition::Bottom => {
             let start_y = (page_size.1 + total_height) / 2.0;
             let text_y = start_y;
-            let image_y = image_data.as_ref().map(|(_, _, h)| start_y - text_height - SPACING - *h + *h);
+            let image_y = image_data
+                .as_ref()
+                .map(|(_, _, h)| start_y - text_height - SPACING - *h + *h);
             (image_y, text_y)
         }
     };
@@ -269,7 +287,7 @@ pub fn render(
                 }
 
                 let (font_id, size) = if segments.iter().any(|s| matches!(s, TemplateSegment::Text(t) if t.trim() == source_title_marker()))
-                    && segments.iter().position(|s| matches!(s, TemplateSegment::Text(t) if t.trim() == source_title_marker())).map(|i| segments.get(i + 1)).flatten() == Some(segment) {
+                    && segments.iter().position(|s| matches!(s, TemplateSegment::Text(t) if t.trim() == source_title_marker())).and_then(|i| segments.get(i + 1)) == Some(segment) {
                     // this is the line after the title marker
                     (font_ids.bold, title_size)
                 } else {
@@ -296,7 +314,9 @@ pub fn render(
                 // find widest line to centre the block as a whole
                 let max_width = lines
                     .iter()
-                    .map(|line| layout::width_of_text(line, &doc.fonts[font_ids.regular], body_size))
+                    .map(|line| {
+                        layout::width_of_text(line, &doc.fonts[font_ids.regular], body_size)
+                    })
                     .fold(Pt(0.0), |a, b| if b.0 > a.0 { b } else { a });
                 let x = (page_size.0 - max_width) / 2.0;
 

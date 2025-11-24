@@ -8,7 +8,7 @@ use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
 use crate::source::{Commit, Source};
 use anyhow::Result;
-use chrono::{Datelike, NaiveDate};
+use jiff::{civil::Date, Zoned};
 use pdf_gen::*;
 use std::collections::HashMap;
 use std::fs;
@@ -29,9 +29,9 @@ pub struct ColophonStats {
     /// Total number of commits
     pub commit_count: usize,
     /// Date of the oldest commit
-    pub first_commit: Option<NaiveDate>,
+    pub first_commit: Option<Date>,
     /// Date of the newest commit
-    pub last_commit: Option<NaiveDate>,
+    pub last_commit: Option<Date>,
     /// Commit counts per month for the histogram (year-month string, count)
     pub commit_frequency: Vec<(String, u32)>,
 }
@@ -96,10 +96,7 @@ pub fn compute_stats(source: &Source, commits: &[Commit]) -> ColophonStats {
 
     if !commits.is_empty() {
         // commits are already sorted (newest or oldest first), find the extremes
-        let dates: Vec<NaiveDate> = commits
-            .iter()
-            .map(|c| c.date.date_naive())
-            .collect();
+        let dates: Vec<Date> = commits.iter().map(|c| c.date.date()).collect();
 
         stats.first_commit = dates.iter().min().copied();
         stats.last_commit = dates.iter().max().copied();
@@ -107,8 +104,8 @@ pub fn compute_stats(source: &Source, commits: &[Commit]) -> ColophonStats {
         // compute commit frequency by month
         let mut month_counts: HashMap<String, u32> = HashMap::new();
         for commit in commits {
-            let date = commit.date.date_naive();
-            let key = format!("{:04}-{:02}", date.year(), date.month());
+            let date = commit.date.date();
+            let key = date.strftime("%Y-%m").to_string();
             *month_counts.entry(key).or_insert(0) += 1;
         }
 
@@ -244,7 +241,10 @@ fn get_remotes(repo_path: &Path) -> String {
 
 /// Expand template placeholders with actual values.
 pub fn expand_template(template: &str, source: &Source, stats: &ColophonStats) -> String {
-    let title = source.title.clone().unwrap_or_else(|| "untitled".to_string());
+    let title = source
+        .title
+        .clone()
+        .unwrap_or_else(|| "untitled".to_string());
 
     let mut authors = source.authors.clone();
     authors.sort();
@@ -260,7 +260,7 @@ pub fn expand_template(template: &str, source: &Source, stats: &ColophonStats) -
         source.licences.join(", ")
     };
 
-    let generated_date = chrono::Local::now().format("%Y-%m-%d").to_string();
+    let generated_date = Zoned::now().strftime("%Y-%m-%d").to_string();
     let tool_version = env!("CARGO_PKG_VERSION");
 
     let date_range = match (stats.first_commit, stats.last_commit) {

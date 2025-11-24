@@ -36,18 +36,24 @@ pub fn generate_stylesheet(theme: &Theme, font_family: &str) -> String {
 
 /// Generate base document styles.
 fn generate_base_styles(font_family: &str, theme: &Theme) -> String {
-    let bg = theme.settings.background.unwrap_or(syntect::highlighting::Color {
-        r: 255,
-        g: 255,
-        b: 255,
-        a: 255,
-    });
-    let fg = theme.settings.foreground.unwrap_or(syntect::highlighting::Color {
-        r: 0,
-        g: 0,
-        b: 0,
-        a: 255,
-    });
+    let bg = theme
+        .settings
+        .background
+        .unwrap_or(syntect::highlighting::Color {
+            r: 255,
+            g: 255,
+            b: 255,
+            a: 255,
+        });
+    let fg = theme
+        .settings
+        .foreground
+        .unwrap_or(syntect::highlighting::Color {
+            r: 0,
+            g: 0,
+            b: 0,
+            a: 255,
+        });
 
     format!(
         r#"/* Base styles */
@@ -310,7 +316,10 @@ fn format_css_rule(class_name: &str, style: &syntect::highlighting::StyleModifie
 
     if let Some(bg) = style.background {
         // only add background if it's noticeably different from default
-        props.push(format!("background-color: rgb({}, {}, {})", bg.r, bg.g, bg.b));
+        props.push(format!(
+            "background-color: rgb({}, {}, {})",
+            bg.r, bg.g, bg.b
+        ));
     }
 
     if let Some(font_style) = style.font_style {
@@ -328,16 +337,23 @@ fn format_css_rule(class_name: &str, style: &syntect::highlighting::StyleModifie
     if props.is_empty() {
         String::new()
     } else {
-        format!(".{}{} {{ {} }}\n", SCOPE_PREFIX, class_name, props.join("; "))
+        format!(
+            ".{}{} {{ {} }}\n",
+            SCOPE_PREFIX,
+            class_name,
+            props.join("; ")
+        )
     }
 }
 
 /// Load a theme by name from the serialised theme set.
 pub fn load_theme(theme: SyntaxTheme) -> Theme {
-    let ts: ThemeSet =
-        bincode::serde::decode_from_slice(crate::highlight::SERIALIZED_THEMES, bincode::config::standard())
-            .expect("can deserialise theme set")
-            .0;
+    let ts: ThemeSet = bincode::serde::decode_from_slice(
+        crate::highlight::SERIALIZED_THEMES,
+        bincode::config::standard(),
+    )
+    .expect("can deserialise theme set")
+    .0;
     ts.themes
         .get(theme.name())
         .cloned()

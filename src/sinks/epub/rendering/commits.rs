@@ -20,7 +20,7 @@ pub fn render(source: &Source) -> Result<String> {
         .map(|commit| {
             let hash_short = &commit.hash[..8.min(commit.hash.len())];
             let message = commit.summary.as_deref().unwrap_or("(no message)");
-            let date = commit.date.format("%Y-%m-%d %H:%M");
+            let date = commit.date.strftime("%Y-%m-%d %H:%M");
             let author_str = commit.author.to_string();
             let author = html_escape::encode_text(&author_str);
             let message_escaped = html_escape::encode_text(message);

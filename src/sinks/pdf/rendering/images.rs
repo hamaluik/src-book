@@ -6,7 +6,7 @@ use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
 use crate::sinks::pdf::rendering::ImagePathMap;
 use anyhow::Result;
-use chrono::TimeZone;
+use jiff::{tz::TimeZone, Timestamp};
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
 use std::path::Path;
@@ -118,8 +118,12 @@ fn describe_image(image: &Image, path: &Path) -> (String, String) {
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap_or_default();
 
-            let created = chrono::Utc.timestamp(unix_time.as_secs() as i64, 0);
-            file_description.push_str(&format!(" Created {}", created.to_rfc2822()));
+            if let Ok(ts) = Timestamp::from_second(unix_time.as_secs() as i64) {
+                let zdt = ts.to_zoned(TimeZone::UTC);
+                if let Ok(rfc2822) = jiff::fmt::rfc2822::to_string(&zdt) {
+                    file_description.push_str(&format!(" Created {}", rfc2822));
+                }
+            }
         }
     }
 

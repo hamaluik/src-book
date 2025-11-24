@@ -430,7 +430,7 @@ impl Default for ColophonConfig {
 }
 
 /// PDF document metadata configuration.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MetadataConfig {
     /// Subject/description for PDF document properties.
     /// Empty string for none.
@@ -438,15 +438,6 @@ pub struct MetadataConfig {
     /// Keywords for PDF document properties (comma-separated recommended).
     /// Empty string for none.
     pub keywords: String,
-}
-
-impl Default for MetadataConfig {
-    fn default() -> Self {
-        Self {
-            subject: String::new(),
-            keywords: String::new(),
-        }
-    }
 }
 
 /// Booklet printing configuration.
@@ -701,7 +692,7 @@ impl Default for PDF {
             binary_hex: BinaryHexConfig::default(),
             numbering: NumberingConfig::default(),
             // legacy fields
-        page_width_in: None,
+            page_width_in: None,
             page_height_in: None,
             margin_top_in: None,
             margin_outer_in: None,
