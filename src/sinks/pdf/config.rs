@@ -234,6 +234,42 @@ impl PageSize {
     }
 }
 
+/// Position of an optional image on the title page.
+///
+/// When an image is configured for the title page, this enum controls where
+/// it appears relative to the text content. The image is always horizontally
+/// centred; this setting controls vertical placement.
+#[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug, Default)]
+pub enum TitlePageImagePosition {
+    /// Image at the top, with text content below
+    #[default]
+    Top,
+    /// Image centred on page (text flows around it, typically above)
+    Centre,
+    /// Image at the bottom, below text content
+    Bottom,
+}
+
+impl fmt::Display for TitlePageImagePosition {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TitlePageImagePosition::Top => write!(f, "Top"),
+            TitlePageImagePosition::Centre => write!(f, "Centre"),
+            TitlePageImagePosition::Bottom => write!(f, "Bottom"),
+        }
+    }
+}
+
+impl TitlePageImagePosition {
+    pub fn all() -> &'static [TitlePageImagePosition] {
+        &[
+            TitlePageImagePosition::Top,
+            TitlePageImagePosition::Centre,
+            TitlePageImagePosition::Bottom,
+        ]
+    }
+}
+
 /// PDF output configuration.
 ///
 /// Margins are asymmetric to support booklet printing: inner margins accommodate
@@ -326,6 +362,26 @@ pub struct PDF {
     #[serde(default = "default_colophon_template")]
     pub colophon_template: String,
 
+    // Title page configuration
+    // The title page supports customisable layout via a template system.
+    // Placeholders are replaced with values; fenced blocks render as monospace.
+
+    /// Title page template with placeholders: {title}, {authors}, {licences}, {date}.
+    /// The {title} placeholder is rendered in the title font; other text uses body font.
+    /// Use markdown-style fenced blocks (```) for monospace text like ASCII art.
+    #[serde(default = "default_title_page_template")]
+    pub title_page_template: String,
+    /// Optional image path for title page (logo, cover art). Supports PNG, JPG, SVG.
+    /// The image is scaled to fit within max dimensions while preserving aspect ratio.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title_page_image: Option<PathBuf>,
+    /// Vertical position of the title page image relative to text content.
+    #[serde(default)]
+    pub title_page_image_position: TitlePageImagePosition,
+    /// Maximum height for the title page image in inches. Width is capped at 80% of page.
+    #[serde(default = "default_title_page_image_max_height")]
+    pub title_page_image_max_height_in: f32,
+
     // PDF document metadata
     // These populate the PDF document info dictionary, visible in PDF viewers
     // under "Properties" or "Document Info". Title and author are set automatically
@@ -407,6 +463,17 @@ fn default_page_number_start() -> i32 {
 fn default_frontmatter_numbering() -> SectionNumbering {
     SectionNumbering::roman_lower()
 }
+fn default_title_page_image_max_height() -> f32 {
+    2.0
+}
+pub fn default_title_page_template() -> String {
+    r#"{title}
+
+- by -
+
+{authors}"#
+        .to_string()
+}
 pub fn default_colophon_template() -> String {
     r#"{title}
 
@@ -469,6 +536,10 @@ impl Default for PDF {
             footer_position: Position::default(),
             footer_rule: RulePosition::default(),
             colophon_template: default_colophon_template(),
+            title_page_template: default_title_page_template(),
+            title_page_image: None,
+            title_page_image_position: TitlePageImagePosition::default(),
+            title_page_image_max_height_in: default_title_page_image_max_height(),
             subject: None,
             keywords: None,
             frontmatter_numbering: default_frontmatter_numbering(),

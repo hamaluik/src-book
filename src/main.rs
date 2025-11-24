@@ -12,7 +12,8 @@ mod highlight;
 mod sinks {
     mod pdf;
     pub use pdf::{
-        default_colophon_template, PageSize, Position, RulePosition, SyntaxTheme, PDF,
+        default_colophon_template, default_title_page_template, PageSize, Position, RulePosition,
+        SyntaxTheme, TitlePageImagePosition, PDF,
     };
 }
 mod source;

@@ -110,7 +110,7 @@ impl PDF {
         info.creator(concat!("src-book v", env!("CARGO_PKG_VERSION")));
         doc.set_info(info);
 
-        title_page::render(self, &mut doc, &font_ids, source)
+        title_page::render(self, &mut doc, &font_ids, source, &mut image_paths)
             .with_context(|| "Failed to render title page")?;
 
         // render colophon if enabled (before the blank page)

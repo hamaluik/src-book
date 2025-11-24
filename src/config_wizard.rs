@@ -44,11 +44,11 @@
 use crate::cli::ConfigArgs;
 use crate::detection::{detect_defaults, detect_frontmatter, DetectedDefaults};
 use crate::file_ordering::{sort_paths, sort_with_entrypoint};
-use crate::sinks::{PageSize, Position, RulePosition, SyntaxTheme, PDF};
+use crate::sinks::{PageSize, Position, RulePosition, SyntaxTheme, TitlePageImagePosition, PDF};
 use crate::source::{AuthorBuilder, CommitOrder, GitRepository, Source};
 use anyhow::{anyhow, Context, Result};
 use dialoguer::theme::ColorfulTheme;
-use dialoguer::{Confirm, FuzzySelect, Input, MultiSelect};
+use dialoguer::{Confirm, FuzzySelect, Input, MultiSelect, Select};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use syntect::easy::HighlightLines;
@@ -875,6 +875,109 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             String::new()
         };
 
+        // Title page customisation: template with placeholders, optional image.
+        // In interactive mode, users can customise layout and add logos/cover art.
+        // In non-interactive mode, use template settings or sensible defaults.
+        // The dimension calculation helps users understand monospace block limits.
+        let (title_page_template, title_page_image, title_page_image_position, title_page_image_max_height_in) =
+            if non_interactive {
+                let template_pdf = template.as_ref().and_then(|t| t.pdf.as_ref());
+                (
+                    template_pdf
+                        .map(|p| p.title_page_template.clone())
+                        .unwrap_or_else(crate::sinks::default_title_page_template),
+                    template_pdf.and_then(|p| p.title_page_image.clone()),
+                    template_pdf
+                        .map(|p| p.title_page_image_position)
+                        .unwrap_or_default(),
+                    template_pdf
+                        .map(|p| p.title_page_image_max_height_in)
+                        .unwrap_or(2.0),
+                )
+            } else if Confirm::with_theme(&theme)
+                .with_prompt("Customise title page layout?")
+                .default(false)
+                .interact()?
+            {
+                println!("Available placeholders:");
+                println!("  {{title}}    - Book title (rendered in title font)");
+                println!("  {{authors}}  - Author list (one per line)");
+                println!("  {{licences}} - Licence identifiers");
+                println!("  {{date}}     - Current date (YYYY-MM-DD)");
+                println!();
+                println!("Use ``` fences for monospace blocks (ASCII art, sample output):");
+                println!("  ```");
+                println!("  Your monospace text here");
+                println!("  ```");
+                println!();
+                // calculate approximate max dimensions for monospace blocks
+                // monospace character width is ~0.6 of font size
+                let char_width_pt = font_size_body_pt * 0.6;
+                let page_width_pt = page_width_in * 72.0;
+                let max_chars = (page_width_pt / char_width_pt).floor() as usize;
+                // height: estimate usable space after title/authors (rough approximation)
+                let page_height_pt = page_height_in * 72.0;
+                let title_space_pt = font_size_title_pt * 1.2 * 2.0; // title + spacing
+                let author_estimate_pt = font_size_body_pt * 1.2 * 4.0; // ~4 lines for authors
+                let line_height_pt = font_size_body_pt * 1.2;
+                let usable_height_pt = page_height_pt - title_space_pt - author_estimate_pt - 72.0; // 1" margin
+                let max_lines = (usable_height_pt / line_height_pt).floor() as usize;
+                println!(
+                    "Monospace block limits: ~{} chars wide, ~{} lines tall (approximate)",
+                    max_chars, max_lines
+                );
+
+                let default_template = crate::sinks::default_title_page_template();
+                println!("\nDefault template:");
+                println!("---");
+                println!("{}", default_template);
+                println!("---");
+
+                let custom_template: String = Input::with_theme(&theme)
+                    .with_prompt("Enter custom template (or press Enter for default)")
+                    .default(default_template)
+                    .allow_empty(true)
+                    .interact()?;
+
+                // image configuration
+                let (image_path, image_position, image_max_height) = if Confirm::with_theme(&theme)
+                    .with_prompt("Add an image to the title page?")
+                    .default(false)
+                    .interact()?
+                {
+                    let path: String = Input::with_theme(&theme)
+                        .with_prompt("Image path (relative or absolute)")
+                        .interact()?;
+
+                    let positions = TitlePageImagePosition::all();
+                    let position_idx = Select::with_theme(&theme)
+                        .with_prompt("Image position")
+                        .items(positions)
+                        .default(0)
+                        .interact()?;
+                    let position = positions[position_idx];
+
+                    let max_height: f32 = Input::with_theme(&theme)
+                        .with_prompt("Maximum image height (inches)")
+                        .default(2.0)
+                        .interact()?;
+
+                    (Some(PathBuf::from(path)), position, max_height)
+                } else {
+                    (None, TitlePageImagePosition::default(), 2.0)
+                };
+
+                (custom_template, image_path, image_position, image_max_height)
+            } else {
+                // use defaults
+                (
+                    crate::sinks::default_title_page_template(),
+                    None,
+                    TitlePageImagePosition::default(),
+                    2.0,
+                )
+            };
+
         // PDF document metadata (subject and keywords) for the document info dictionary.
         // these appear in PDF viewers under "Properties" and can help with organisation.
         // in non-interactive mode, use template settings if available; otherwise omit.
@@ -938,6 +1041,10 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             footer_position,
             footer_rule,
             colophon_template,
+            title_page_template,
+            title_page_image,
+            title_page_image_position,
+            title_page_image_max_height_in,
             subject,
             keywords,
             ..PDF::default()

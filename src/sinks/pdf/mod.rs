@@ -14,4 +14,7 @@ mod fonts;
 mod imposition;
 mod rendering;
 
-pub use config::{default_colophon_template, PageSize, Position, RulePosition, SyntaxTheme, PDF};
+pub use config::{
+    default_colophon_template, default_title_page_template, PageSize, Position, RulePosition,
+    SyntaxTheme, TitlePageImagePosition, PDF,
+};
