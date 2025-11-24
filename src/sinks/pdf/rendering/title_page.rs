@@ -292,9 +292,15 @@ pub fn render(
             }
             TemplateSegment::Mono(lines) => {
                 let line_height = doc.fonts[font_ids.regular].line_height(body_size);
+
+                // find widest line to centre the block as a whole
+                let max_width = lines
+                    .iter()
+                    .map(|line| layout::width_of_text(line, &doc.fonts[font_ids.regular], body_size))
+                    .fold(Pt(0.0), |a, b| if b.0 > a.0 { b } else { a });
+                let x = (page_size.0 - max_width) / 2.0;
+
                 for line in lines {
-                    let text_width = layout::width_of_text(line, &doc.fonts[font_ids.regular], body_size);
-                    let x = (page_size.0 - text_width) / 2.0;
                     page.add_span(SpanLayout {
                         text: line.clone(),
                         font: SpanFont {
