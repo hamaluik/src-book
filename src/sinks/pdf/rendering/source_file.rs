@@ -200,7 +200,7 @@ pub fn render(
             break;
         }
 
-        layout::layout_text_natural(doc, &mut page, start, &mut text, wrap_width, bbox);
+        layout::layout_text_naive(doc, &mut page, start, &mut text, wrap_width, bbox);
         let page_id = doc.add_page(page);
         page_count += 1;
         if first_page.is_none() {

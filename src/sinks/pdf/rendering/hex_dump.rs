@@ -216,7 +216,7 @@ pub fn render(
         }
 
         // no wrap width for hex dump (no line numbers)
-        layout::layout_text_natural(doc, &mut page, start, &mut text, Pt(0.0), bbox);
+        layout::layout_text_naive(doc, &mut page, start, &mut text, Pt(0.0), bbox);
 
         let page_id = doc.add_page(page);
         page_count += 1;

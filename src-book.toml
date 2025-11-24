@@ -85,8 +85,8 @@ outer_in = 0.125
 title_pt = 22.0
 heading_pt = 17.0
 subheading_pt = 8.0
-body_pt = 7.0
-small_pt = 6.0
+body_pt = 6.0
+small_pt = 5.0
 
 [pdf.header]
 template = "{file}"
