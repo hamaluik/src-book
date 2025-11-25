@@ -270,6 +270,8 @@ Headers, footers, title pages, and cover pages support these placeholders:
 - OneHalfLight
 - gruvbox (Light) (Hard)
 - GitHub
+- Rosé Pine Dawn
+- Catppuccin Latte
 
 All themes are light-coloured, optimised for printing on white paper.
 

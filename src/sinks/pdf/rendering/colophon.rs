@@ -1,8 +1,9 @@
 //! Colophon/statistics page rendering.
 //!
-//! Creates a page with book metadata, repository statistics, and commit activity.
-//! The colophon appears after the title page and serves as the book's "about" page,
-//! similar to the copyright/attribution page in traditional books.
+//! Creates a page with book metadata, repository statistics, and a commit activity
+//! sparkline. The colophon appears after the title page and serves as the book's
+//! "about" page, similar to the copyright/attribution page in traditional books.
+//! The commit chart uses Unicode block characters to visualise contribution patterns.
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
@@ -151,42 +152,7 @@ fn count_lines(path: &Path) -> Result<usize> {
 }
 
 // use shared formatting utilities
-use crate::formatting::format_bytes;
-
-/// Generate a text-based commit frequency histogram.
-fn render_commit_chart(frequency: &[(String, u32)]) -> String {
-    if frequency.is_empty() {
-        return String::new();
-    }
-
-    let max_count = frequency.iter().map(|(_, c)| *c).max().unwrap_or(1);
-    let bar_chars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-
-    // limit to last 24 months for readability
-    let display_freq: Vec<_> = if frequency.len() > 24 {
-        frequency.iter().skip(frequency.len() - 24).collect()
-    } else {
-        frequency.iter().collect()
-    };
-
-    let mut lines = Vec::new();
-
-    for (month, count) in display_freq {
-        let bar_level = if max_count > 0 {
-            (((*count as f64 / max_count as f64) * 7.0).round() as usize).min(7)
-        } else {
-            0
-        };
-
-        // create a bar with multiple characters for better visibility
-        let bar_width = (((*count as f64 / max_count as f64) * 20.0).round() as usize).max(1);
-        let bar: String = std::iter::repeat_n(bar_chars[bar_level], bar_width).collect();
-
-        lines.push(format!("  {} {} ({})", month, bar, count));
-    }
-
-    lines.join("\n")
-}
+use crate::formatting::{format_bytes, render_sparkline};
 
 /// Format language statistics as a table.
 fn render_language_stats(stats: &[LanguageStat]) -> String {
@@ -269,7 +235,8 @@ pub fn expand_template(template: &str, source: &Source, stats: &ColophonStats) -
     };
 
     let language_stats = render_language_stats(&stats.language_stats);
-    let commit_chart = render_commit_chart(&stats.commit_frequency);
+    // use 60 chars as reasonable default width for sparkline (fits most page sizes)
+    let commit_chart = render_sparkline(&stats.commit_frequency, 60);
     let remotes = get_remotes(&source.repository);
 
     template
@@ -339,15 +306,13 @@ pub fn render(
             y = page_size.1 - margin_top;
         }
 
-        // determine if this line should use small font (for chart/stats)
+        // determine if this line should use small font (for stats)
         // language stats lines start with "  ." (two spaces then extension dot)
-        // commit chart lines contain Unicode block characters
-        let (current_font_size, current_line_height) =
-            if line.starts_with("  ") && (line.contains('▁') || line.starts_with("  .")) {
-                (small_size, small_line_height)
-            } else {
-                (font_size, line_height)
-            };
+        let (current_font_size, current_line_height) = if line.starts_with("  .") {
+            (small_size, small_line_height)
+        } else {
+            (font_size, line_height)
+        };
 
         if !line.is_empty() {
             page.add_span(SpanLayout {

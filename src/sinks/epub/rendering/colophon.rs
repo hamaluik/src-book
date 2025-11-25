@@ -195,8 +195,20 @@ fn compute_stats(source: &Source) -> ColophonStats {
         }
     };
 
-    // commit chart (simplified text version)
-    let commit_chart = generate_commit_chart(&commits);
+    // compute commit frequency by month for sparkline
+    let commit_chart = if commits.is_empty() {
+        String::new()
+    } else {
+        let mut monthly: HashMap<String, u32> = HashMap::new();
+        for commit in &commits {
+            let key = commit.date.strftime("%Y-%m").to_string();
+            *monthly.entry(key).or_default() += 1;
+        }
+        let mut frequency: Vec<_> = monthly.into_iter().collect();
+        frequency.sort_by(|a, b| a.0.cmp(&b.0));
+        // use 60 chars as reasonable default width for sparkline
+        render_sparkline(&frequency, 60)
+    };
 
     ColophonStats {
         file_count,
@@ -209,46 +221,5 @@ fn compute_stats(source: &Source) -> ColophonStats {
     }
 }
 
-fn generate_commit_chart(commits: &[crate::source::Commit]) -> String {
-    if commits.is_empty() {
-        return "  (no commits)".to_string();
-    }
-
-    // group by month
-    let mut monthly: HashMap<String, usize> = HashMap::new();
-    for commit in commits {
-        let key = commit.date.strftime("%Y-%m").to_string();
-        *monthly.entry(key).or_default() += 1;
-    }
-
-    let mut months: Vec<_> = monthly.into_iter().collect();
-    months.sort();
-
-    // take last 12 months
-    let months: Vec<_> = months.into_iter().rev().take(12).rev().collect();
-
-    if months.is_empty() {
-        return "  (no commits)".to_string();
-    }
-
-    let max_commits = months.iter().map(|(_, c)| *c).max().unwrap_or(1);
-    let bar_chars = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
-
-    months
-        .iter()
-        .map(|(month, count)| {
-            let bar_level = if max_commits > 0 {
-                (((*count as f64 / max_commits as f64) * 7.0).round() as usize).min(7)
-            } else {
-                0
-            };
-            let bar_width = (((*count as f64 / max_commits as f64) * 20.0).round() as usize).max(1);
-            let bar: String = std::iter::repeat_n(bar_chars[bar_level], bar_width).collect();
-            format!("  {} {:>3} {}", month, count, bar)
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 // use shared formatting utilities
-use crate::formatting::{format_bytes, format_number};
+use crate::formatting::{format_bytes, format_number, render_sparkline};

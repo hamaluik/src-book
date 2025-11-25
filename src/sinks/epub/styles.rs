@@ -6,6 +6,8 @@
 //! - Scope-based syntax classes (e.g., `.syn-keyword`, `.syn-string`) derived from theme colours
 //! - Font style utility classes (`.syn-bold`, `.syn-italic`, `.syn-underline`) for tokens
 //!   with special styling
+//! - Tag badge styles (`.tag-badge`) for inline tags in commit history
+//! - Tags appendix styles (`.tag`, `.tag-name`, `.tag-message`, etc.) for the tags chapter
 //!
 //! The source file renderer uses a hybrid approach: inline RGB colours for all tokens
 //! (since scope-to-class mapping is imperfect) plus CSS classes for font styling.
