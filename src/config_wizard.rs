@@ -45,11 +45,12 @@ use crate::cli::ConfigArgs;
 use crate::detection::{detect_defaults, detect_frontmatter, DetectedDefaults};
 use crate::file_ordering::{sort_paths, sort_with_entrypoint};
 use crate::sinks::{
-    BinaryHexConfig, BookletConfig, ColophonConfig, FontSizesConfig, FooterConfig, HeaderConfig,
-    MarginsConfig, MetadataConfig, NumberingConfig, PageConfig, PageSize, Position, RulePosition,
-    SyntaxTheme, TitlePageConfig, TitlePageImagePosition, PDF,
+    AppendixSectionNumbering, BinaryHexConfig, BookletConfig, ColophonConfig, FontSizesConfig,
+    FooterConfig, HeaderConfig, InlineTagsConfig, MarginsConfig, MetadataConfig, NumberingConfig,
+    PageConfig, PageSize, Position, RulePosition, SyntaxTheme, TagsAppendixConfig, TitlePageConfig,
+    TitlePageImagePosition, PDF,
 };
-use crate::source::{AuthorBuilder, CommitOrder, GitRepository, Source};
+use crate::source::{AuthorBuilder, CommitOrder, GitRepository, Source, TagOrder};
 use anyhow::{anyhow, Context, Result};
 use dialoguer::theme::ColorfulTheme;
 use dialoguer::{Confirm, FuzzySelect, Input, MultiSelect, Select};
@@ -1439,6 +1440,102 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             )
         };
 
+        // git tag configuration: inline badges and tags appendix
+        let existing_inline_tags = existing_pdf.map(|p| p.inline_tags.enabled).unwrap_or(false);
+        let existing_tags_appendix = existing_pdf
+            .map(|p| p.tags_appendix.enabled)
+            .unwrap_or(false);
+
+        let (inline_tags_enabled, tags_appendix_enabled, tags_appendix_order, tags_prefix) =
+            if non_interactive {
+                let template_pdf = template.as_ref().and_then(|t| t.pdf.as_ref());
+                (
+                    template_pdf.map(|p| p.inline_tags.enabled).unwrap_or(false),
+                    template_pdf
+                        .map(|p| p.tags_appendix.enabled)
+                        .unwrap_or(false),
+                    template_pdf
+                        .map(|p| p.tags_appendix.order)
+                        .unwrap_or(TagOrder::NewestFirst),
+                    template_pdf
+                        .map(|p| p.numbering.tags.prefix.clone())
+                        .unwrap_or_else(|| "B-".to_string()),
+                )
+            } else if commit_order != CommitOrder::Disabled {
+                // only ask about tags if commit history is enabled
+                let inline_enabled = Confirm::with_theme(&theme)
+                    .with_prompt("Show git tag badges inline with commits in the history?")
+                    .default(existing_inline_tags)
+                    .interact()?;
+
+                let appendix_enabled = Confirm::with_theme(&theme)
+                    .with_prompt("Include a tags appendix listing all git tags?")
+                    .default(existing_tags_appendix)
+                    .interact()?;
+
+                let tag_order = if appendix_enabled {
+                    let tag_order_options: Vec<String> =
+                        TagOrder::all().iter().map(|o| o.to_string()).collect();
+                    let default_idx = existing_pdf
+                        .and_then(|p| {
+                            TagOrder::all()
+                                .iter()
+                                .position(|&o| o == p.tags_appendix.order)
+                        })
+                        .unwrap_or(0);
+                    let tag_order_idx = FuzzySelect::with_theme(&theme)
+                        .with_prompt("Tag listing order")
+                        .items(&tag_order_options)
+                        .default(default_idx)
+                        .interact()?;
+                    TagOrder::all()[tag_order_idx]
+                } else {
+                    TagOrder::NewestFirst
+                };
+
+                let prefix = if appendix_enabled {
+                    let default_prefix = existing_pdf
+                        .map(|p| p.numbering.tags.prefix.clone())
+                        .unwrap_or_else(|| "B-".to_string());
+                    let prefix_str: String = Input::with_theme(&theme)
+                        .with_prompt(
+                            "Page number prefix for tags section (e.g., 'B-' for B-1, B-2)",
+                        )
+                        .default(default_prefix)
+                        .allow_empty(true)
+                        .interact()?;
+                    prefix_str
+                } else {
+                    "B-".to_string()
+                };
+
+                (inline_enabled, appendix_enabled, tag_order, prefix)
+            } else {
+                // commit history disabled, use defaults
+                (false, false, TagOrder::NewestFirst, "B-".to_string())
+            };
+
+        // also get commit history prefix if tags appendix is enabled
+        let commits_prefix = if non_interactive {
+            template
+                .as_ref()
+                .and_then(|t| t.pdf.as_ref())
+                .map(|p| p.numbering.commits.prefix.clone())
+                .unwrap_or_else(|| "A-".to_string())
+        } else if tags_appendix_enabled && commit_order != CommitOrder::Disabled {
+            let default_prefix = existing_pdf
+                .map(|p| p.numbering.commits.prefix.clone())
+                .unwrap_or_else(|| "A-".to_string());
+            let prefix_str: String = Input::with_theme(&theme)
+                .with_prompt("Page number prefix for commit history (e.g., 'A-' for A-1, A-2)")
+                .default(default_prefix)
+                .allow_empty(true)
+                .interact()?;
+            prefix_str
+        } else {
+            "A-".to_string()
+        };
+
         pdf = Some(PDF {
             outfile,
             font: "SourceCodePro".to_string(),
@@ -1486,7 +1583,24 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
                 max_bytes: binary_hex_max_bytes,
                 font_size_pt: font_size_hex_pt,
             },
-            numbering: NumberingConfig::default(),
+            numbering: NumberingConfig {
+                commits: AppendixSectionNumbering {
+                    prefix: commits_prefix,
+                    ..Default::default()
+                },
+                tags: AppendixSectionNumbering {
+                    prefix: tags_prefix,
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            inline_tags: InlineTagsConfig {
+                enabled: inline_tags_enabled,
+            },
+            tags_appendix: TagsAppendixConfig {
+                enabled: tags_appendix_enabled,
+                order: tags_appendix_order,
+            },
             ..Default::default()
         });
     }
@@ -1543,9 +1657,85 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
             })
             .unwrap_or(SyntaxTheme::all()[0]);
 
+        // EPUB tag configuration: mirror PDF settings or prompt
+        let existing_epub_inline_tags = existing_epub
+            .map(|e| e.inline_tags.enabled)
+            .unwrap_or(false);
+        let existing_epub_tags_appendix = existing_epub
+            .map(|e| e.tags_appendix.enabled)
+            .unwrap_or(false);
+
+        let (epub_inline_tags_enabled, epub_tags_appendix_enabled, epub_tags_appendix_order) =
+            if non_interactive {
+                let template_epub = template.as_ref().and_then(|t| t.epub.as_ref());
+                (
+                    template_epub
+                        .map(|e| e.inline_tags.enabled)
+                        .unwrap_or(false),
+                    template_epub
+                        .map(|e| e.tags_appendix.enabled)
+                        .unwrap_or(false),
+                    template_epub
+                        .map(|e| e.tags_appendix.order)
+                        .unwrap_or(TagOrder::NewestFirst),
+                )
+            } else if commit_order != CommitOrder::Disabled {
+                // if PDF has the same setting, use it by default
+                let default_inline = pdf
+                    .as_ref()
+                    .map(|p| p.inline_tags.enabled)
+                    .unwrap_or(existing_epub_inline_tags);
+                let default_appendix = pdf
+                    .as_ref()
+                    .map(|p| p.tags_appendix.enabled)
+                    .unwrap_or(existing_epub_tags_appendix);
+                let default_order = pdf
+                    .as_ref()
+                    .map(|p| p.tags_appendix.order)
+                    .unwrap_or(TagOrder::NewestFirst);
+
+                let inline_enabled = Confirm::with_theme(&theme)
+                    .with_prompt("EPUB: Show git tag badges inline with commits?")
+                    .default(default_inline)
+                    .interact()?;
+
+                let appendix_enabled = Confirm::with_theme(&theme)
+                    .with_prompt("EPUB: Include a tags appendix?")
+                    .default(default_appendix)
+                    .interact()?;
+
+                let tag_order = if appendix_enabled {
+                    let tag_order_options: Vec<String> =
+                        TagOrder::all().iter().map(|o| o.to_string()).collect();
+                    let default_idx = TagOrder::all()
+                        .iter()
+                        .position(|&o| o == default_order)
+                        .unwrap_or(0);
+                    let tag_order_idx = FuzzySelect::with_theme(&theme)
+                        .with_prompt("EPUB: Tag listing order")
+                        .items(&tag_order_options)
+                        .default(default_idx)
+                        .interact()?;
+                    TagOrder::all()[tag_order_idx]
+                } else {
+                    TagOrder::NewestFirst
+                };
+
+                (inline_enabled, appendix_enabled, tag_order)
+            } else {
+                (false, false, TagOrder::NewestFirst)
+            };
+
         epub = Some(crate::sinks::EPUB {
             outfile: epub_outfile,
             theme: epub_theme,
+            inline_tags: crate::sinks::epub::InlineTagsConfig {
+                enabled: epub_inline_tags_enabled,
+            },
+            tags_appendix: crate::sinks::epub::TagsAppendixConfig {
+                enabled: epub_tags_appendix_enabled,
+                order: epub_tags_appendix_order,
+            },
             ..Default::default()
         });
     }

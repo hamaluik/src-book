@@ -16,4 +16,4 @@ mod config;
 mod rendering;
 mod styles;
 
-pub use config::EPUB;
+pub use config::{InlineTagsConfig, TagsAppendixConfig, EPUB};

@@ -26,6 +26,8 @@ pub struct PageMetadata {
     pub section: Section,
     /// Page index within the section (0-indexed)
     pub page_in_section: usize,
+    /// Skip header/footer rendering for this page (e.g., blank recto-alignment pages)
+    pub skip_numbering: bool,
 }
 
 impl PageMetadata {
@@ -34,11 +36,17 @@ impl PageMetadata {
             file_path: None,
             section,
             page_in_section,
+            skip_numbering: false,
         }
     }
 
     pub fn with_file(mut self, file_path: impl Into<String>) -> Self {
         self.file_path = Some(file_path.into());
+        self
+    }
+
+    pub fn skip_numbering(mut self) -> Self {
+        self.skip_numbering = true;
         self
     }
 }
@@ -48,7 +56,8 @@ impl PageMetadata {
 pub struct SectionTotals {
     pub frontmatter: usize,
     pub source: usize,
-    pub appendix: usize,
+    pub commit_history: usize,
+    pub tags: usize,
 }
 
 impl SectionTotals {
@@ -57,7 +66,8 @@ impl SectionTotals {
         match section {
             Section::Frontmatter => self.frontmatter,
             Section::Source => self.source,
-            Section::Appendix => self.appendix,
+            Section::CommitHistory => self.commit_history,
+            Section::Tags => self.tags,
         }
     }
 }
@@ -108,6 +118,7 @@ pub fn format_page_number(n: i32, style: PageNumberStyle) -> String {
 ///
 /// The page number is calculated as: section_start + page_in_section
 /// The total is the section's page count, not the entire document.
+/// Appendix sections (CommitHistory, Tags) may have optional prefixes.
 fn expand_template(
     template: &str,
     file_path: Option<&str>,
@@ -117,11 +128,20 @@ fn expand_template(
     config: &PDF,
 ) -> String {
     let numbering = config.numbering_for_section(metadata.section);
+    let prefix = config.prefix_for_section(metadata.section);
     let page_number = numbering.start + metadata.page_in_section as i32;
     let section_total = section_totals.total_for(metadata.section);
 
-    let page_str = format_page_number(page_number, numbering.style);
-    let total_str = format_page_number(section_total as i32, numbering.style);
+    let page_str = format!(
+        "{}{}",
+        prefix,
+        format_page_number(page_number, numbering.style)
+    );
+    let total_str = format!(
+        "{}{}",
+        prefix,
+        format_page_number(section_total as i32, numbering.style)
+    );
 
     template
         .replace("{file}", file_path.unwrap_or(""))
@@ -178,13 +198,18 @@ fn render_rule(page: &mut Page, content_box: &Rect, y: Pt, thickness: Pt) {
 }
 
 /// Calculate total page counts per section from page metadata.
+/// Excludes blank recto-alignment pages (skip_numbering = true).
 pub fn calculate_section_totals(page_metadata: &[PageMetadata]) -> SectionTotals {
     let mut totals = SectionTotals::default();
     for meta in page_metadata {
+        if meta.skip_numbering {
+            continue;
+        }
         match meta.section {
             Section::Frontmatter => totals.frontmatter += 1,
             Section::Source => totals.source += 1,
-            Section::Appendix => totals.appendix += 1,
+            Section::CommitHistory => totals.commit_history += 1,
+            Section::Tags => totals.tags += 1,
         }
     }
     totals
@@ -229,6 +254,11 @@ pub fn render_headers_and_footers(
 
     for (pi, page_id) in doc.page_order.iter().skip(page_offset).enumerate() {
         let metadata = page_metadata.get(pi).cloned().unwrap_or_default();
+
+        // skip blank recto-alignment pages
+        if metadata.skip_numbering {
+            continue;
+        }
 
         let page = doc.pages.get_mut(*page_id).expect("page exists");
         let content_box = page.content_box;
@@ -357,7 +387,8 @@ mod tests {
         let totals = SectionTotals {
             frontmatter: 0,
             source: 100,
-            appendix: 0,
+            commit_history: 0,
+            tags: 0,
         };
         let result = expand_template(
             "Page {n} of {total} - {file}",
@@ -379,7 +410,8 @@ mod tests {
         let totals = SectionTotals {
             frontmatter: 10,
             source: 0,
-            appendix: 0,
+            commit_history: 0,
+            tags: 0,
         };
         let result = expand_template(
             "- {n} -",
@@ -401,11 +433,14 @@ mod tests {
             PageMetadata::new(Section::Source, 0),
             PageMetadata::new(Section::Source, 1),
             PageMetadata::new(Section::Source, 2),
-            PageMetadata::new(Section::Appendix, 0),
+            PageMetadata::new(Section::CommitHistory, 0),
+            PageMetadata::new(Section::Tags, 0),
+            PageMetadata::new(Section::Tags, 1),
         ];
         let totals = calculate_section_totals(&metadata);
         assert_eq!(totals.frontmatter, 2);
         assert_eq!(totals.source, 3);
-        assert_eq!(totals.appendix, 1);
+        assert_eq!(totals.commit_history, 1);
+        assert_eq!(totals.tags, 2);
     }
 }

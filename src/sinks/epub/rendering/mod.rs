@@ -10,6 +10,7 @@ mod colophon;
 mod commits;
 mod cover;
 mod source_file;
+mod tags;
 mod toc;
 
 use super::config::{RenderStats, EPUB};
@@ -179,13 +180,36 @@ impl EPUB {
 
         // add commit history if enabled
         if source.commit_order != CommitOrder::Disabled {
-            let commits_html = commits::render(source)?;
+            // load tags for inline display if enabled
+            let tags_by_commit = if self.inline_tags.enabled {
+                Some(
+                    source
+                        .tags_by_commit()
+                        .with_context(|| "Failed to get tags for repository")?,
+                )
+            } else {
+                None
+            };
+
+            let commits_html = commits::render(source, tags_by_commit.as_ref())?;
             builder
                 .add_content(
                     EpubContent::new("commits.xhtml", commits_html.as_bytes())
                         .title("Commit History"),
                 )
                 .with_context(|| "Failed to add commit history page")?;
+            document_count += 1;
+        }
+
+        // add tags appendix if enabled
+        if self.tags_appendix.enabled {
+            let tag_list = source
+                .tags(self.tags_appendix.order)
+                .with_context(|| "Failed to get tags for repository")?;
+            let tags_html = tags::render(&title, &tag_list)?;
+            builder
+                .add_content(EpubContent::new("tags.xhtml", tags_html.as_bytes()).title("Tags"))
+                .with_context(|| "Failed to add tags page")?;
             document_count += 1;
         }
 

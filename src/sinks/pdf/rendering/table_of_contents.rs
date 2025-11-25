@@ -175,6 +175,8 @@ pub fn render(
     frontmatter_pages: HashMap<PathBuf, usize>,
     source_pages: HashMap<PathBuf, usize>,
     git_history_page: Option<usize>,
+    tags_page: Option<usize>,
+    _commit_history_page_count: usize,
 ) -> Result<usize> {
     let page_size = config.page_size();
     let contents_size = Pt(config.fonts.heading_pt);
@@ -251,13 +253,8 @@ pub fn render(
     let tree = build_tree(source_pages);
     let flat_entries = flatten_tree(&tree);
 
-    // calculate source section page count for appendix indices (before moving flat_entries)
-    let source_max_page = flat_entries.iter().map(|e| e.page).max().unwrap_or(0);
-    let source_page_count = if flat_entries.is_empty() {
-        0
-    } else {
-        source_max_page + 1 - frontmatter_page_count
-    };
+    // calculate source section page count (unused after simplifying appendix calculations)
+    let _source_max_page = flat_entries.iter().map(|e| e.page).max().unwrap_or(0);
 
     entries.extend(flat_entries.into_iter().map(|e| {
         // source pages are stored relative to page_offset, so page_in_section
@@ -273,12 +270,23 @@ pub fn render(
 
     if let Some(git_history_page) = git_history_page {
         let abs_page = git_history_page - skip_pages;
-        let page_in_section = abs_page.saturating_sub(frontmatter_page_count + source_page_count);
+        // always the first content page of the section
         entries.push(TocDisplayEntry {
             text: "Commit History".to_string(),
             abs_page,
-            section: Section::Appendix,
-            page_in_section,
+            section: Section::CommitHistory,
+            page_in_section: 0,
+        });
+    }
+
+    if let Some(tags_page_idx) = tags_page {
+        let abs_page = tags_page_idx - skip_pages;
+        // always the first content page of the section
+        entries.push(TocDisplayEntry {
+            text: "Tags".to_string(),
+            abs_page,
+            section: Section::Tags,
+            page_in_section: 0,
         });
     }
 
@@ -347,10 +355,15 @@ pub fn render(
                 &doc.fonts[font_ids.regular],
                 entry_size,
             );
-            // format page number using section-specific style
+            // format page number using section-specific style and prefix
             let numbering = config.numbering_for_section(entry.section);
+            let prefix = config.prefix_for_section(entry.section);
             let display_page_num = numbering.start + entry.page_in_section as i32;
-            let pagenum = format_page_number(display_page_num, numbering.style);
+            let pagenum = format!(
+                "{}{}",
+                prefix,
+                format_page_number(display_page_num, numbering.style)
+            );
             let pagenum_width =
                 layout::width_of_text(&pagenum, &doc.fonts[font_ids.regular], entry_size);
 

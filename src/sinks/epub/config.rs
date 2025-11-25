@@ -87,6 +87,31 @@ impl Default for FontsConfig {
     }
 }
 
+/// Configuration for displaying tags inline with commits.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct InlineTagsConfig {
+    /// Show tag badges inline with commits in the commit history.
+    pub enabled: bool,
+}
+
+/// Configuration for the tags appendix section.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagsAppendixConfig {
+    /// Include a tags appendix section listing all tags.
+    pub enabled: bool,
+    /// How to sort tags in the appendix.
+    pub order: crate::source::TagOrder,
+}
+
+impl Default for TagsAppendixConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            order: crate::source::TagOrder::NewestFirst,
+        }
+    }
+}
+
 /// EPUB output configuration.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(clippy::upper_case_acronyms)]
@@ -104,6 +129,13 @@ pub struct EPUB {
     pub metadata: MetadataConfig,
     /// Font configuration
     pub fonts: FontsConfig,
+
+    /// Inline tag badges in commit history
+    #[serde(default)]
+    pub inline_tags: InlineTagsConfig,
+    /// Tags appendix configuration
+    #[serde(default)]
+    pub tags_appendix: TagsAppendixConfig,
 }
 
 impl Default for EPUB {
@@ -115,6 +147,8 @@ impl Default for EPUB {
             colophon: ColophonConfig::default(),
             metadata: MetadataConfig::default(),
             fonts: FontsConfig::default(),
+            inline_tags: InlineTagsConfig::default(),
+            tags_appendix: TagsAppendixConfig::default(),
         }
     }
 }

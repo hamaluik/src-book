@@ -6,10 +6,13 @@
 
 mod author;
 mod commit;
+mod tag;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 pub use author::*;
 pub use commit::*;
+pub use tag::*;
 
 mod providers;
 use anyhow::{anyhow, Context, Result};
@@ -146,5 +149,62 @@ impl Source {
         }
 
         Ok(commits)
+    }
+
+    /// Load tags from the repository, sorted according to the specified order.
+    pub fn tags(&self, order: TagOrder) -> Result<Vec<Tag>> {
+        let repo = git2::Repository::open(&self.repository).with_context(|| {
+            format!(
+                "Failed to open path {} as a git repository!",
+                self.repository.display()
+            )
+        })?;
+
+        let mut tags: Vec<Tag> = Vec::new();
+
+        // iterate all references and filter for tags
+        for reference in repo.references()? {
+            let reference = reference?;
+            if reference.is_tag() {
+                if let Some(tag) = Tag::from_ref(&reference, &repo) {
+                    tags.push(tag);
+                }
+            }
+        }
+
+        Tag::sort_tags(&mut tags, order);
+        Ok(tags)
+    }
+
+    /// Build a map from commit hash to list of tag names pointing to that commit.
+    ///
+    /// Used for inline tag display in the commit history section.
+    pub fn tags_by_commit(&self) -> Result<HashMap<String, Vec<String>>> {
+        let repo = git2::Repository::open(&self.repository).with_context(|| {
+            format!(
+                "Failed to open path {} as a git repository!",
+                self.repository.display()
+            )
+        })?;
+
+        let mut map: HashMap<String, Vec<String>> = HashMap::new();
+
+        for reference in repo.references()? {
+            let reference = reference?;
+            if reference.is_tag() {
+                if let Some(tag) = Tag::from_ref(&reference, &repo) {
+                    map.entry(tag.commit_hash.clone())
+                        .or_default()
+                        .push(tag.name.clone());
+                }
+            }
+        }
+
+        // sort tag names within each commit for consistent display
+        for tags in map.values_mut() {
+            tags.sort();
+        }
+
+        Ok(map)
     }
 }

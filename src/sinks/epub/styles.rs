@@ -192,6 +192,68 @@ code {{
     color: #666;
 }}
 
+/* Tag badges (inline with commits) */
+.tag-badge {{
+    display: inline-block;
+    font-family: "{font_family}", monospace;
+    font-size: 0.85em;
+    font-weight: bold;
+    color: #268bd2;
+    margin-left: 0.3em;
+}}
+
+/* Tags appendix */
+.tag {{
+    margin: 1em 0;
+    padding: 0.5em;
+    border-left: 3px solid #268bd2;
+}}
+
+.tag-name {{
+    font-family: "{font_family}", monospace;
+    font-weight: bold;
+    color: #268bd2;
+}}
+
+.tag-arrow {{
+    color: #888;
+}}
+
+.tag-commit {{
+    font-family: "{font_family}", monospace;
+    color: #6c71c4;
+}}
+
+.tag-summary {{
+    color: #333;
+    margin: 0.3em 0;
+}}
+
+.tag-commit-date {{
+    font-size: 0.9em;
+    color: #859900;
+}}
+
+.tag-tagger {{
+    font-size: 0.9em;
+    color: #2aa198;
+    margin-top: 0.3em;
+}}
+
+.tag-date {{
+    font-size: 0.9em;
+    color: #859900;
+}}
+
+.tag-message {{
+    font-size: 0.9em;
+    color: #586e75;
+    margin-top: 0.5em;
+    padding-left: 1em;
+    border-left: 2px solid #ddd;
+    white-space: pre-wrap;
+}}
+
 /* Source file header */
 .source-header {{
     background: #f5f5f5;

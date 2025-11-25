@@ -101,8 +101,10 @@ pub enum Section {
     Frontmatter,
     /// Source code files
     Source,
-    /// Appendix content (commit history, index, etc.)
-    Appendix,
+    /// Commit history appendix
+    CommitHistory,
+    /// Tags appendix
+    Tags,
 }
 
 impl fmt::Display for Section {
@@ -110,7 +112,8 @@ impl fmt::Display for Section {
         match self {
             Section::Frontmatter => write!(f, "Frontmatter"),
             Section::Source => write!(f, "Source"),
-            Section::Appendix => write!(f, "Appendix"),
+            Section::CommitHistory => write!(f, "Commit History"),
+            Section::Tags => write!(f, "Tags"),
         }
     }
 }
@@ -494,6 +497,65 @@ impl Default for BinaryHexConfig {
     }
 }
 
+/// Configuration for displaying tags inline with commits.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct InlineTagsConfig {
+    /// Show tag badges inline with commits in the commit history.
+    pub enabled: bool,
+}
+
+/// Configuration for the tags appendix section.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TagsAppendixConfig {
+    /// Include a tags appendix section listing all tags.
+    pub enabled: bool,
+    /// How to sort tags in the appendix.
+    pub order: crate::source::TagOrder,
+}
+
+impl Default for TagsAppendixConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            order: crate::source::TagOrder::NewestFirst,
+        }
+    }
+}
+
+/// Page numbering configuration with optional prefix for appendix sections.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppendixSectionNumbering {
+    /// Page number style (Arabic, Roman lowercase, Roman uppercase)
+    #[serde(default)]
+    pub style: PageNumberStyle,
+    /// Starting page number for this section
+    #[serde(default = "default_page_number_start")]
+    pub start: i32,
+    /// Optional prefix for page numbers (e.g., "A-" for "A-1", "A-2")
+    #[serde(default)]
+    pub prefix: String,
+}
+
+impl Default for AppendixSectionNumbering {
+    fn default() -> Self {
+        Self {
+            style: PageNumberStyle::Arabic,
+            start: 1,
+            prefix: String::new(),
+        }
+    }
+}
+
+impl From<SectionNumbering> for AppendixSectionNumbering {
+    fn from(sn: SectionNumbering) -> Self {
+        Self {
+            style: sn.style,
+            start: sn.start,
+            prefix: String::new(),
+        }
+    }
+}
+
 /// Page numbering configuration for all document sections.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NumberingConfig {
@@ -501,8 +563,16 @@ pub struct NumberingConfig {
     pub frontmatter: SectionNumbering,
     /// Numbering for source code section
     pub source: SectionNumbering,
-    /// Numbering for appendix section
-    pub appendix: SectionNumbering,
+    /// Numbering for commit history appendix (with optional prefix)
+    #[serde(default)]
+    pub commits: AppendixSectionNumbering,
+    /// Numbering for tags appendix (with optional prefix)
+    #[serde(default)]
+    pub tags: AppendixSectionNumbering,
+
+    /// Legacy: single appendix numbering (migrated to commits/tags)
+    #[serde(default, skip_serializing)]
+    pub(crate) appendix: Option<SectionNumbering>,
 }
 
 impl Default for NumberingConfig {
@@ -510,7 +580,20 @@ impl Default for NumberingConfig {
         Self {
             frontmatter: SectionNumbering::roman_lower(),
             source: SectionNumbering::default(),
-            appendix: SectionNumbering::default(),
+            commits: AppendixSectionNumbering::default(),
+            tags: AppendixSectionNumbering::default(),
+            appendix: None,
+        }
+    }
+}
+
+impl NumberingConfig {
+    /// Applies legacy appendix field to commits and tags if present.
+    pub fn apply_legacy_fields(&mut self) {
+        if let Some(appendix) = self.appendix.take() {
+            // migrate legacy appendix to both commits and tags
+            self.commits = AppendixSectionNumbering::from(appendix);
+            self.tags = AppendixSectionNumbering::from(appendix);
         }
     }
 }
@@ -554,6 +637,11 @@ pub struct PDF {
     pub booklet: BookletConfig,
     /// Binary file hex dump rendering
     pub binary_hex: BinaryHexConfig,
+
+    /// Inline tag badges in commit history
+    pub inline_tags: InlineTagsConfig,
+    /// Tags appendix configuration
+    pub tags_appendix: TagsAppendixConfig,
 
     /// Section-specific page numbering
     pub numbering: NumberingConfig,
@@ -698,6 +786,8 @@ impl Default for PDF {
             metadata: MetadataConfig::default(),
             booklet: BookletConfig::default(),
             binary_hex: BinaryHexConfig::default(),
+            inline_tags: InlineTagsConfig::default(),
+            tags_appendix: TagsAppendixConfig::default(),
             numbering: NumberingConfig::default(),
             // legacy fields
             page_width_in: None,
@@ -757,7 +847,14 @@ impl PDF {
         let base = match section {
             Section::Frontmatter => self.numbering.frontmatter,
             Section::Source => self.numbering.source,
-            Section::Appendix => self.numbering.appendix,
+            Section::CommitHistory => SectionNumbering {
+                style: self.numbering.commits.style,
+                start: self.numbering.commits.start,
+            },
+            Section::Tags => SectionNumbering {
+                style: self.numbering.tags.style,
+                start: self.numbering.tags.start,
+            },
         };
 
         // apply legacy overrides if present
@@ -768,6 +865,17 @@ impl PDF {
             }
         } else {
             base
+        }
+    }
+
+    /// Returns the page number prefix for a given section.
+    ///
+    /// Only appendix sections (CommitHistory, Tags) support prefixes.
+    pub fn prefix_for_section(&self, section: Section) -> &str {
+        match section {
+            Section::Frontmatter | Section::Source => "",
+            Section::CommitHistory => &self.numbering.commits.prefix,
+            Section::Tags => &self.numbering.tags.prefix,
         }
     }
 
@@ -894,9 +1002,13 @@ impl PDF {
         if let Some(v) = self.source_numbering {
             self.numbering.source = v;
         }
+        // legacy appendix_numbering migrates to both commits and tags
         if let Some(v) = self.appendix_numbering {
-            self.numbering.appendix = v;
+            self.numbering.commits = AppendixSectionNumbering::from(v);
+            self.numbering.tags = AppendixSectionNumbering::from(v);
         }
+        // apply NumberingConfig's own legacy migration
+        self.numbering.apply_legacy_fields();
     }
 
     /// Returns the title page image path, if configured.

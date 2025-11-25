@@ -2,12 +2,20 @@
 //!
 //! Displays git commits with hash, message, author, and date. Each commit is
 //! rendered as a styled div with CSS classes for consistent formatting.
+//! Optionally displays tag badges inline with commits.
 
 use crate::source::Source;
 use anyhow::Result;
+use std::collections::HashMap;
 
 /// Render the commit history as XHTML.
-pub fn render(source: &Source) -> Result<String> {
+///
+/// If `tags_by_commit` is provided, tags pointing to each commit are rendered
+/// as `[tag_name]` badges after the commit hash.
+pub fn render(
+    source: &Source,
+    tags_by_commit: Option<&HashMap<String, Vec<String>>>,
+) -> Result<String> {
     let title = source
         .title
         .clone()
@@ -25,13 +33,39 @@ pub fn render(source: &Source) -> Result<String> {
             let author = html_escape::encode_text(&author_str);
             let message_escaped = html_escape::encode_text(message);
 
+            // render inline tag badges if available
+            let tags_html = if let Some(tags_map) = tags_by_commit {
+                if let Some(tags) = tags_map.get(&commit.hash) {
+                    tags.iter()
+                        .map(|t| {
+                            format!(
+                                r#"<span class="tag-badge">[{}]</span>"#,
+                                html_escape::encode_text(t)
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                } else {
+                    String::new()
+                }
+            } else {
+                String::new()
+            };
+
+            let tags_span = if tags_html.is_empty() {
+                String::new()
+            } else {
+                format!(" {}", tags_html)
+            };
+
             format!(
                 r#"<div class="commit">
-<span class="hash">{hash}</span>
+<span class="hash">{hash}</span>{tags}
 <div class="message">{message}</div>
 <div class="meta">{author} &#183; {date}</div>
 </div>"#,
                 hash = hash_short,
+                tags = tags_span,
                 message = message_escaped,
                 author = author,
                 date = date,

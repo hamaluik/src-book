@@ -15,9 +15,10 @@ mod imposition;
 mod rendering;
 
 pub use config::{
-    default_colophon_template, default_title_page_template, BinaryHexConfig, BookletConfig,
-    ColophonConfig, FontSizesConfig, FooterConfig, HeaderConfig, MarginsConfig, MetadataConfig,
-    NumberingConfig, PageConfig, PageSize, Position, RulePosition, SyntaxTheme, TitlePageConfig,
+    default_colophon_template, default_title_page_template, AppendixSectionNumbering,
+    BinaryHexConfig, BookletConfig, ColophonConfig, FontSizesConfig, FooterConfig, HeaderConfig,
+    InlineTagsConfig, MarginsConfig, MetadataConfig, NumberingConfig, PageConfig, PageSize,
+    Position, RulePosition, SyntaxTheme, TagsAppendixConfig, TitlePageConfig,
     TitlePageImagePosition, PDF,
 };
 pub use fonts::LoadedFonts;

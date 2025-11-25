@@ -28,10 +28,11 @@ mod sinks {
     pub mod pdf;
     pub use epub::EPUB;
     pub use pdf::{
-        default_colophon_template, default_title_page_template, BinaryHexConfig, BookletConfig,
-        ColophonConfig, FontSizesConfig, FooterConfig, HeaderConfig, MarginsConfig, MetadataConfig,
-        NumberingConfig, PageConfig, PageSize, Position, RulePosition, SyntaxTheme,
-        TitlePageConfig, TitlePageImagePosition, PDF,
+        default_colophon_template, default_title_page_template, AppendixSectionNumbering,
+        BinaryHexConfig, BookletConfig, ColophonConfig, FontSizesConfig, FooterConfig,
+        HeaderConfig, InlineTagsConfig, MarginsConfig, MetadataConfig, NumberingConfig, PageConfig,
+        PageSize, Position, RulePosition, SyntaxTheme, TagsAppendixConfig, TitlePageConfig,
+        TitlePageImagePosition, PDF,
     };
 }
 mod source;

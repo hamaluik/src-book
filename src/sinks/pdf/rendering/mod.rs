@@ -38,6 +38,7 @@ mod hex_dump;
 mod images;
 mod source_file;
 mod table_of_contents;
+mod tags;
 mod title_page;
 
 pub use header_footer::PageMetadata;
@@ -141,7 +142,7 @@ impl PDF {
         // track page counts within each section for section-specific numbering
         let mut frontmatter_page_count: usize = 0;
         let mut source_page_count: usize = 0;
-        let mut appendix_page_count: usize = 0;
+        let mut commit_history_page_count: usize = 0;
 
         // render frontmatter files first if present
         if !source.frontmatter_files.is_empty() {
@@ -315,20 +316,84 @@ impl PDF {
         // track pages before commit rendering to count commit pages
         let pages_before_commits = doc.page_order.len();
 
+        // load tags if inline tags are enabled
+        let tags_by_commit = if self.inline_tags.enabled {
+            Some(
+                source
+                    .tags_by_commit()
+                    .with_context(|| "Failed to get tags for repository")?,
+            )
+        } else {
+            None
+        };
+
         let commit_list = source
             .commits()
             .with_context(|| "Failed to get commits for repository")?;
-        let commit_page_index = commits::render(self, &mut doc, &font_ids, commit_list)
-            .with_context(|| "Failed to render commit history")?;
-        if let Some(commit_page) = commit_page_index {
+        let commit_result = commits::render(
+            self,
+            &mut doc,
+            &font_ids,
+            commit_list,
+            tags_by_commit.as_ref(),
+        )
+        .with_context(|| "Failed to render commit history")?;
+        if let Some(commit_page) = commit_result.first_page {
             doc.add_bookmark(None, "Commit History", commit_page);
         }
 
-        // track commit pages as appendix (no file path for commit history)
-        let commit_page_count = doc.page_order.len() - pages_before_commits;
-        for _ in 0..commit_page_count {
-            page_metadata.push(PageMetadata::new(Section::Appendix, appendix_page_count));
-            appendix_page_count += 1;
+        // track commit pages, marking blank recto-alignment page separately
+        let commit_total_pages = doc.page_order.len() - pages_before_commits;
+        if commit_result.blank_inserted {
+            // first page is blank for recto alignment - skip numbering
+            page_metadata.push(PageMetadata::new(Section::CommitHistory, 0).skip_numbering());
+        }
+        // content pages get sequential numbering starting at 0
+        let commit_content_pages = if commit_result.blank_inserted {
+            commit_total_pages.saturating_sub(1)
+        } else {
+            commit_total_pages
+        };
+        for _ in 0..commit_content_pages {
+            page_metadata.push(PageMetadata::new(
+                Section::CommitHistory,
+                commit_history_page_count,
+            ));
+            commit_history_page_count += 1;
+        }
+
+        // render tags appendix if enabled
+        let pages_before_tags = doc.page_order.len();
+        let tags_result = if self.tags_appendix.enabled {
+            let tag_list = source
+                .tags(self.tags_appendix.order)
+                .with_context(|| "Failed to get tags for repository")?;
+            let result = tags::render(self, &mut doc, &font_ids, tag_list)
+                .with_context(|| "Failed to render tags appendix")?;
+            if let Some(tags_page) = result.first_page {
+                doc.add_bookmark(None, "Tags", tags_page);
+            }
+            result
+        } else {
+            tags::TagsRenderResult {
+                first_page: None,
+                blank_inserted: false,
+            }
+        };
+
+        // track tags pages, marking blank recto-alignment page separately
+        let tags_total_pages = doc.page_order.len() - pages_before_tags;
+        if tags_result.blank_inserted {
+            // first page is blank for recto alignment - skip numbering
+            page_metadata.push(PageMetadata::new(Section::Tags, 0).skip_numbering());
+        }
+        let tags_content_pages = if tags_result.blank_inserted {
+            tags_total_pages.saturating_sub(1)
+        } else {
+            tags_total_pages
+        };
+        for i in 0..tags_content_pages {
+            page_metadata.push(PageMetadata::new(Section::Tags, i));
         }
 
         let num_toc_pages = table_of_contents::render(
@@ -338,7 +403,9 @@ impl PDF {
             page_offset,
             frontmatter_pages,
             source_pages,
-            commit_page_index,
+            commit_result.first_page,
+            tags_result.first_page,
+            commit_content_pages,
         )
         .with_context(|| "Failed to render table of contents")?;
         page_offset += num_toc_pages;

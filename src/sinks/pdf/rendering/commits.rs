@@ -2,6 +2,7 @@
 //!
 //! Displays commits with hash, summary, date, author, and optional body text.
 //! Commits are rendered in the order provided (typically newest first).
+//! Optionally displays tag badges inline with commits.
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
@@ -9,21 +10,45 @@ use crate::source::Commit;
 use anyhow::Result;
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
+use std::collections::HashMap;
+
+/// Result of rendering the commit history section.
+pub struct CommitRenderResult {
+    /// Page index of the first content page, or None if no commits.
+    pub first_page: Option<usize>,
+    /// Whether a blank page was inserted for recto alignment.
+    pub blank_inserted: bool,
+}
 
 /// Render the commit history section.
 ///
-/// Returns the page index of the first page, or None if there were no commits.
+/// If `tags_by_commit` is provided and non-empty, tags pointing to each commit
+/// are rendered as `[tag_name]` badges after the commit hash.
+///
+/// Returns render result with first page index and blank page info.
 pub fn render(
     config: &PDF,
     doc: &mut Document,
     font_ids: &FontIds,
     commits: Vec<Commit>,
-) -> Result<Option<usize>> {
+    tags_by_commit: Option<&HashMap<String, Vec<String>>>,
+) -> Result<CommitRenderResult> {
     let small_size = Pt(config.fonts.small_pt);
     let subheading_size = Pt(config.fonts.subheading_pt);
 
     // convert the commits to a series of text spans
-    let mut text: Vec<(String, Colour, SpanFont)> = Vec::with_capacity(commits.len() * 6);
+    let mut text: Vec<(String, Colour, SpanFont)> = Vec::with_capacity(commits.len() * 6 + 1);
+
+    // section title
+    let heading_font = SpanFont {
+        id: font_ids.bold,
+        size: Pt(config.fonts.heading_pt),
+    };
+    text.push((
+        format!("Commit History ({} commits)\n\n", commits.len()),
+        colours::BLACK,
+        heading_font,
+    ));
 
     let span_font_normal = SpanFont {
         id: font_ids.regular,
@@ -33,6 +58,9 @@ pub fn render(
         id: font_ids.bold,
         size: small_size,
     };
+
+    // tag badge colour (blue)
+    let tag_colour = Colour::new_rgb_bytes(38, 139, 210);
 
     for commit in commits.into_iter() {
         let Commit {
@@ -48,6 +76,16 @@ pub fn render(
             Colour::new_rgb_bytes(143, 63, 113),
             span_font_bold,
         ));
+
+        // render inline tag badges if enabled
+        if let Some(tags_map) = tags_by_commit {
+            if let Some(tags) = tags_map.get(&hash) {
+                for tag_name in tags {
+                    text.push((format!(" [{}]", tag_name), tag_colour, span_font_bold));
+                }
+            }
+        }
+
         if let Some(summary) = summary {
             text.push((
                 format!(" {}\n", summary),
@@ -80,6 +118,8 @@ pub fn render(
     let wrap_width =
         layout::width_of_text("         ", &doc.fonts[font_ids.bold], span_font_bold.size);
     let mut first_page = None;
+    let mut blank_inserted = false;
+
     while !text.is_empty() {
         let margins = Margins::trbl(
             In(0.25).into(),
@@ -90,9 +130,10 @@ pub fn render(
         .with_gutter(In(0.25).into(), doc.page_order.len().saturating_sub(1));
         let page_size = config.page_size();
 
-        // insert a blank page so we open to the correct side
+        // insert a blank page so we open to the correct side (recto)
         if first_page.is_none() && doc.page_order.len() % 2 == 1 {
             doc.add_page(Page::new(page_size, Some(margins.clone())));
+            blank_inserted = true;
         }
 
         let mut page = Page::new(page_size, Some(margins));
@@ -125,5 +166,8 @@ pub fn render(
         }
     }
 
-    Ok(first_page)
+    Ok(CommitRenderResult {
+        first_page,
+        blank_inserted,
+    })
 }
