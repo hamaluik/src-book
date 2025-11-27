@@ -225,7 +225,7 @@ pub fn render(
         }
 
         // no wrap width for hex dump (no line numbers)
-        layout::layout_text_naive(doc, &mut page, start, &mut text, Pt(0.0), bbox);
+        layout::layout_text_naive(doc, &mut page, start, &mut text, Pt(0.0), bbox, None);
 
         pages.push(page);
         page_index += 1;

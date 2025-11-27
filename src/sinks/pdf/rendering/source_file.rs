@@ -62,7 +62,8 @@ pub fn render(
 
     // read the contents, or handle binary files
     let (contents, is_binary) = match std::fs::read_to_string(path) {
-        Ok(contents) => (contents.replace("    ", "  "), false),
+        // convert tabs to spaces but preserve existing spacing (important for ASCII art)
+        Ok(contents) => (contents.replace('\t', "    "), false),
         Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
             // binary file - check if we should render as hex
             if config.binary_hex.enabled {
@@ -214,7 +215,17 @@ pub fn render(
             break;
         }
 
-        layout::layout_text_naive(doc, &mut page, start, &mut text, wrap_width, bbox);
+        // use regular font for width calculations to ensure uniform monospace spacing
+        // even when syntax highlighting uses bold/italic variants
+        layout::layout_text_naive(
+            doc,
+            &mut page,
+            start,
+            &mut text,
+            wrap_width,
+            bbox,
+            Some(font_ids.regular),
+        );
         pages.push(page);
         page_index += 1;
     }
