@@ -69,6 +69,37 @@ fn try_main() -> Result<()> {
 
             let Configuration { source, pdf, epub } = config;
 
+            // check if file list is out of sync with repository
+            match source.check_staleness() {
+                Ok(staleness) if staleness.is_stale => {
+                    println!(
+                        "{}: File list may be outdated",
+                        console::style("Warning").yellow()
+                    );
+                    if !staleness.added_files.is_empty() {
+                        println!(
+                            "  {} new file(s) not in config",
+                            staleness.added_files.len()
+                        );
+                    }
+                    if !staleness.removed_files.is_empty() {
+                        println!(
+                            "  {} file(s) in config no longer exist",
+                            staleness.removed_files.len()
+                        );
+                    }
+                    println!("  Run 'src-book update' to refresh the file list.\n");
+                }
+                Err(e) => {
+                    // don't fail render for staleness check errors, just skip the warning
+                    eprintln!(
+                        "{}: Could not check file staleness: {e:#}",
+                        console::style("Note").dim()
+                    );
+                }
+                _ => {}
+            }
+
             // display layout capacity before rendering so users know what to expect
             // this helps identify potential readability issues (line wrapping) before
             // committing time to PDF generation

@@ -16,8 +16,21 @@ pub use tag::*;
 
 mod providers;
 use anyhow::{anyhow, Context, Result};
+use globset::Glob;
 pub use providers::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+
+/// Report from comparing current repository state against saved config.
+#[derive(Debug, Default)]
+pub struct StalenessReport {
+    /// True if any files differ between repo and config
+    pub is_stale: bool,
+    /// Files in repo but not in config
+    pub added_files: Vec<PathBuf>,
+    /// Files in config but not in repo
+    pub removed_files: Vec<PathBuf>,
+}
 
 /// Source metadata and file list for rendering a codebase as a book.
 ///
@@ -206,5 +219,51 @@ impl Source {
         }
 
         Ok(map)
+    }
+
+    /// Check if the saved file lists are out of sync with the current repository.
+    ///
+    /// Re-scans the repository using the saved `block_globs` and `exclude_submodules`
+    /// settings, then compares against `source_files` and `frontmatter_files`.
+    pub fn check_staleness(&self) -> Result<StalenessReport> {
+        // compile glob matchers from saved patterns
+        let block_globs = self
+            .block_globs
+            .iter()
+            .map(|pattern| {
+                Glob::new(pattern)
+                    .with_context(|| format!("invalid glob pattern: {}", pattern))
+                    .map(|g| g.compile_matcher())
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        // re-scan the repository
+        let repo = GitRepository::load(&self.repository, block_globs, self.exclude_submodules)
+            .with_context(|| "failed to scan repository for staleness check")?;
+
+        // build sets for comparison (excluding src-book.toml from discovered files)
+        let discovered: HashSet<PathBuf> = repo
+            .source_files
+            .into_iter()
+            .filter(|f| f != &PathBuf::from("src-book.toml"))
+            .collect();
+
+        let saved: HashSet<PathBuf> = self
+            .source_files
+            .iter()
+            .chain(self.frontmatter_files.iter())
+            .cloned()
+            .collect();
+
+        // find differences
+        let added_files: Vec<PathBuf> = discovered.difference(&saved).cloned().collect();
+        let removed_files: Vec<PathBuf> = saved.difference(&discovered).cloned().collect();
+        let is_stale = !added_files.is_empty() || !removed_files.is_empty();
+
+        Ok(StalenessReport {
+            is_stale,
+            added_files,
+            removed_files,
+        })
     }
 }

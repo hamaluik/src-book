@@ -53,7 +53,6 @@ source_files = [
     "src/sinks/pdf/rendering/table_of_contents.rs",
     "src/sinks/pdf/rendering/tags.rs",
     "src/sinks/pdf/rendering/title_page.rs",
-    "Cargo.lock",
     "build.rs",
     "logo.txt",
     "assets/fonts/FiraMono-Bold.ttf",
@@ -68,7 +67,7 @@ source_files = [
 user_names = []
 name = "Kenton Hamaluik"
 email = "kenton@hamaluik.ca"
-prominence = 51
+prominence = 54
 
 [pdf]
 outfile = "src-book.pdf"
@@ -103,7 +102,8 @@ position = "Outer"
 rule = "None"
 
 [pdf.title_page]
-template = """```
+template = """
+```
 ╭┬───────────────────────────╮
 ││                           │
 ││ /// src-book              │
