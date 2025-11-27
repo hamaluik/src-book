@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 /// Syntax highlighting requires all four variants to properly render bold, italic, and
 /// bold-italic code tokens. Fonts that lack certain variants (like FiraMono which has
 /// no italic) fall back to regular/bold as appropriate.
+#[derive(Clone, Copy)]
 pub struct FontIds {
     pub regular: Id<Font>,
     pub bold: Id<Font>,

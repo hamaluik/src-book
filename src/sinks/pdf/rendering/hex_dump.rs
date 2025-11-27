@@ -26,6 +26,7 @@
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
 use crate::sinks::pdf::rendering::source_file::RenderResult;
+use anyhow::Result;
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
 use std::path::Path;
@@ -110,21 +111,25 @@ fn category_colour(category: ByteCategory, theme: &syntect::highlighting::Theme)
 /// available page width. Files exceeding `binary_hex_max_bytes` are truncated with
 /// a notice indicating the limit.
 ///
-/// Returns the first page index and page count.
+/// Returns pages and bookmark title for the file.
 pub fn render(
     config: &PDF,
-    doc: &mut Document,
+    doc: &Document,
     font_ids: &FontIds,
-    _path: &Path,
+    path: &Path,
     data: &[u8],
     truncated: bool,
     theme: &syntect::highlighting::Theme,
-) -> RenderResult {
+) -> Result<RenderResult> {
     if data.is_empty() && !truncated {
-        return RenderResult {
-            first_page: None,
-            page_count: 0,
-        };
+        let bookmark_title = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.display().to_string());
+        return Ok(RenderResult {
+            pages: Vec::new(),
+            bookmark_title,
+        });
     }
 
     let hex_size = Pt(config.binary_hex.font_size_pt);
@@ -136,10 +141,14 @@ pub fn render(
     let byte_width = layout::width_of_text("00", &doc.fonts[font_ids.regular], hex_size);
     let content_width = page_size.0 - In(0.5).into() - In(0.25).into(); // margins
     if byte_width > content_width {
-        return RenderResult {
-            first_page: None,
-            page_count: 0,
-        };
+        let bookmark_title = path
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| path.display().to_string());
+        return Ok(RenderResult {
+            pages: Vec::new(),
+            bookmark_title,
+        });
     }
 
     // build hex spans with colours - let layout handle line wrapping
@@ -181,8 +190,8 @@ pub fn render(
     }
 
     // render pages
-    let mut first_page = None;
-    let mut page_count = 0;
+    let mut pages = Vec::new();
+    let mut page_index = 0;
     while !text.is_empty() {
         let margins = Margins::trbl(
             In(0.25).into(),
@@ -190,7 +199,7 @@ pub fn render(
             In(0.5).into(),
             In(0.25).into(),
         )
-        .with_gutter(In(0.25).into(), doc.page_order.len());
+        .with_gutter(In(0.25).into(), page_index);
 
         let mut page = Page::new(page_size, Some(margins));
         let start = layout::baseline_start(&page, &doc.fonts[font_ids.regular], text_size);
@@ -218,17 +227,19 @@ pub fn render(
         // no wrap width for hex dump (no line numbers)
         layout::layout_text_naive(doc, &mut page, start, &mut text, Pt(0.0), bbox);
 
-        let page_id = doc.add_page(page);
-        page_count += 1;
-        if first_page.is_none() {
-            first_page = Some(doc.index_of_page(page_id).expect("page was just added"));
-        }
+        pages.push(page);
+        page_index += 1;
     }
 
-    RenderResult {
-        first_page,
-        page_count,
-    }
+    let bookmark_title = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.display().to_string());
+
+    Ok(RenderResult {
+        pages,
+        bookmark_title,
+    })
 }
 
 #[cfg(test)]

@@ -4,6 +4,29 @@
 //! images, commit history, and table of contents. Manages hierarchical PDF bookmarks
 //! for navigation.
 //!
+//! ## Two-Phase Rendering Architecture
+//!
+//! Source file rendering uses a two-phase approach to enable future parallelisation:
+//!
+//! 1. **Phase 1 (parallelisable)**: Text files are rendered to `Vec<Page>` without
+//!    modifying the document. Each file produces an independent [`source_file::RenderResult`]
+//!    containing its pages and bookmark title. This phase can be parallelised with rayon
+//!    by changing `.iter().map()` to `.par_iter().map()`.
+//!
+//! 2. **Phase 2 (sequential)**: Pages are inserted into the document in the correct order,
+//!    and bookmarks are created using the returned `Id<Page>` handles. This phase must
+//!    remain sequential because it mutates the document.
+//!
+//! Image files are handled separately because they require document mutation to add
+//! images to the arena, so they're rendered inline during phase 2.
+//!
+//! ## ID-Based Bookmarks
+//!
+//! Bookmarks use `Id<Page>` references rather than page indices. This means bookmark
+//! targets remain stable even when pages are inserted later (e.g., the table of contents
+//! is rendered after content but inserted before it). The pdf-gen library resolves these
+//! IDs to actual indices during document serialization.
+//!
 //! ## Document Metadata
 //!
 //! PDF document properties (title, author, subject, keywords, creator) are set from
@@ -49,6 +72,7 @@ use crate::sinks::pdf::fonts::{FontIds, LoadedFonts};
 use crate::source::Source;
 use anyhow::{Context, Result};
 use indicatif::ProgressBar;
+use pdf_gen::id_arena_crate::Id;
 use pdf_gen::*;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -127,12 +151,13 @@ impl PDF {
             doc.add_page(Page::new(self.page_size(), None));
         }
 
-        doc.add_bookmark(None, "Title", 0).borrow_mut().bolded();
-        // TOC bookmark index: title (1) + colophon pages + blank page (if added)
-        let toc_bookmark_index = doc.page_order.len();
-        doc.add_bookmark(None, "Table of Contents", toc_bookmark_index)
+        // bookmark the first page (title page)
+        let title_page_id = doc.page_order[0];
+        doc.add_bookmark(None, "Title", title_page_id)
             .borrow_mut()
-            .italicized();
+            .bolded();
+
+        // TOC will be inserted later, so we'll create its bookmark after rendering
 
         let mut frontmatter_pages: HashMap<PathBuf, usize> = HashMap::new();
         let mut source_pages: HashMap<PathBuf, usize> = HashMap::new();
@@ -145,10 +170,8 @@ impl PDF {
         let mut commit_history_page_count: usize = 0;
 
         // render frontmatter files first if present
+        let mut first_frontmatter_page_id = None;
         if !source.frontmatter_files.is_empty() {
-            let frontmatter_bookmark = doc.add_bookmark(None, "Frontmatter", doc.page_order.len());
-            frontmatter_bookmark.borrow_mut().bolded();
-
             for file in source.frontmatter_files.iter() {
                 let file_name = file
                     .file_name()
@@ -167,7 +190,7 @@ impl PDF {
                 {
                     "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
                     | "tiff" => {
-                        let page_index =
+                        let page_id =
                             images::render(self, &mut doc, &font_ids, file, &mut image_paths)?;
                         // images are single pages
                         page_metadata.push(
@@ -175,16 +198,14 @@ impl PDF {
                                 .with_file(file.display().to_string()),
                         );
                         frontmatter_page_count += 1;
-                        let file_name = file
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| file.display().to_string());
-                        doc.add_bookmark(Some(frontmatter_bookmark.clone()), file_name, page_index);
+                        if first_frontmatter_page_id.is_none() {
+                            first_frontmatter_page_id = Some(page_id);
+                        }
                     }
                     _ => {
                         let result = source_file::render(
                             self,
-                            &mut doc,
+                            &doc,
                             &font_ids,
                             file,
                             &ss,
@@ -194,9 +215,12 @@ impl PDF {
                             format!("Failed to render frontmatter file {}!", file.display())
                         })?;
 
+                        // insert pages and get their IDs
+                        let page_ids = doc.add_pages(result.pages);
+
                         // track metadata for each page rendered
                         let file_display = file.display().to_string();
-                        for _ in 0..result.page_count {
+                        for _ in &page_ids {
                             page_metadata.push(
                                 PageMetadata::new(Section::Frontmatter, frontmatter_page_count)
                                     .with_file(file_display.clone()),
@@ -204,16 +228,11 @@ impl PDF {
                             frontmatter_page_count += 1;
                         }
 
-                        if let Some(page_index) = result.first_page {
-                            let file_name = file
-                                .file_name()
-                                .map(|n| n.to_string_lossy().to_string())
-                                .unwrap_or_else(|| file.display().to_string());
-                            doc.add_bookmark(
-                                Some(frontmatter_bookmark.clone()),
-                                file_name,
-                                page_index,
-                            );
+                        // create bookmark if we have pages
+                        if let Some(&first_page_id) = page_ids.first() {
+                            if first_frontmatter_page_id.is_none() {
+                                first_frontmatter_page_id = Some(first_page_id);
+                            }
                         }
                     }
                 }
@@ -222,93 +241,145 @@ impl PDF {
             }
         }
 
-        let source_code_bookmark = doc.add_bookmark(None, "Source Files", doc.page_order.len());
-        {
-            source_code_bookmark.borrow_mut().bolded();
-        }
+        // create frontmatter bookmark now that we know the first page
+        // (we don't add child bookmarks to frontmatter, but the bookmark itself is in the outline)
+        let _frontmatter_bookmark = if let Some(first_page_id) = first_frontmatter_page_id {
+            let bm = doc.add_bookmark(None, "Frontmatter", first_page_id);
+            bm.borrow_mut().bolded();
+            Some(bm)
+        } else {
+            None
+        };
+
+        // source code bookmark created lazily when we encounter the first source file
+        let mut source_code_bookmark: Option<Rc<RefCell<OutlineEntry>>> = None;
 
         // track folder bookmarks for hierarchical structure
         let mut folder_bookmarks: HashMap<PathBuf, Rc<RefCell<OutlineEntry>>> = HashMap::new();
 
-        for file in source.source_files.iter() {
-            let file_name = file
-                .file_name()
-                .map(|n| n.to_string_lossy().to_string())
-                .unwrap_or_else(|| file.display().to_string());
-            progress.set_message(file_name);
+        // separate source files into images (need doc mutation) and text files (can parallelize)
+        let (_image_files, text_files): (Vec<_>, Vec<_>) =
+            source.source_files.iter().partition(|file| {
+                matches!(
+                    file.extension()
+                        .unwrap_or_default()
+                        .to_ascii_lowercase()
+                        .to_str()
+                        .unwrap_or_default(),
+                    "png"
+                        | "svg"
+                        | "bmp"
+                        | "ico"
+                        | "jpg"
+                        | "jpeg"
+                        | "webp"
+                        | "avif"
+                        | "tga"
+                        | "tiff"
+                )
+            });
 
-            source_pages.insert(file.clone(), doc.page_order.len() - page_offset);
-
-            // render an image or source file depending on its extension
-            match file
-                .extension()
-                .unwrap_or_default()
-                .to_ascii_lowercase()
-                .to_str()
-                .unwrap_or_default()
-            {
-                "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga"
-                | "tiff" => {
-                    let page_index =
-                        images::render(self, &mut doc, &font_ids, file, &mut image_paths)?;
-                    // images are single pages
-                    page_metadata.push(
-                        PageMetadata::new(Section::Source, source_page_count)
-                            .with_file(file.display().to_string()),
+        // phase 1: render text files (can be parallelized in future)
+        let mut rendered_text_files: HashMap<PathBuf, source_file::RenderResult> = {
+            text_files
+                .iter()
+                .map(|file| {
+                    progress.set_message(
+                        file.file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_else(|| file.display().to_string()),
                     );
-                    source_page_count += 1;
-                    let parent_bookmark = get_or_create_folder_bookmark(
-                        &mut doc,
-                        &mut folder_bookmarks,
-                        &source_code_bookmark,
-                        file,
-                        page_index,
-                    );
-                    let file_name = file
-                        .file_name()
-                        .map(|n| n.to_string_lossy().to_string())
-                        .unwrap_or_else(|| file.display().to_string());
-                    doc.add_bookmark(Some(parent_bookmark), file_name, page_index);
-                }
-                _ => {
                     let result = source_file::render(
                         self,
-                        &mut doc,
+                        &doc,
                         &font_ids,
                         file,
                         &ss,
                         &ts.themes[self.theme.name()],
                     )
                     .with_context(|| format!("Failed to render source file {}!", file.display()))?;
+                    progress.inc(1);
+                    Ok(((*file).clone(), result))
+                })
+                .collect::<Result<HashMap<_, _>>>()?
+        };
 
-                    // track metadata for each page rendered
-                    let file_display = file.display().to_string();
-                    for _ in 0..result.page_count {
-                        page_metadata.push(
-                            PageMetadata::new(Section::Source, source_page_count)
-                                .with_file(file_display.clone()),
-                        );
-                        source_page_count += 1;
+        // phase 2: add all files to document in original order, creating bookmarks
+        for file in source.source_files.iter() {
+            let file_name = file
+                .file_name()
+                .map(|n| n.to_string_lossy().to_string())
+                .unwrap_or_else(|| file.display().to_string());
+
+            source_pages.insert(file.clone(), doc.page_order.len() - page_offset);
+
+            let is_image = matches!(
+                file.extension()
+                    .unwrap_or_default()
+                    .to_ascii_lowercase()
+                    .to_str()
+                    .unwrap_or_default(),
+                "png" | "svg" | "bmp" | "ico" | "jpg" | "jpeg" | "webp" | "avif" | "tga" | "tiff"
+            );
+
+            if is_image {
+                // images are rendered directly (need doc for image arena)
+                let page_id = images::render(self, &mut doc, &font_ids, file, &mut image_paths)?;
+                page_metadata.push(
+                    PageMetadata::new(Section::Source, source_page_count)
+                        .with_file(file.display().to_string()),
+                );
+                source_page_count += 1;
+
+                if source_code_bookmark.is_none() {
+                    let bm = doc.add_bookmark(None, "Source Code", page_id);
+                    bm.borrow_mut().bolded();
+                    source_code_bookmark = Some(bm);
+                }
+
+                let parent_bookmark = get_or_create_folder_bookmark(
+                    &mut doc,
+                    &mut folder_bookmarks,
+                    source_code_bookmark.as_ref().unwrap(),
+                    file,
+                    page_id,
+                );
+                doc.add_bookmark(Some(parent_bookmark), file_name, page_id);
+            } else {
+                // take the pre-rendered result for this file
+                let result = rendered_text_files
+                    .remove(file)
+                    .expect("file was rendered in phase 1");
+
+                // insert pages and get their IDs
+                let page_ids = doc.add_pages(result.pages);
+
+                let file_display = file.display().to_string();
+                for _ in &page_ids {
+                    page_metadata.push(
+                        PageMetadata::new(Section::Source, source_page_count)
+                            .with_file(file_display.clone()),
+                    );
+                    source_page_count += 1;
+                }
+
+                if let Some(&first_page_id) = page_ids.first() {
+                    if source_code_bookmark.is_none() {
+                        let bm = doc.add_bookmark(None, "Source Code", first_page_id);
+                        bm.borrow_mut().bolded();
+                        source_code_bookmark = Some(bm);
                     }
 
-                    if let Some(page_index) = result.first_page {
-                        let parent_bookmark = get_or_create_folder_bookmark(
-                            &mut doc,
-                            &mut folder_bookmarks,
-                            &source_code_bookmark,
-                            file,
-                            page_index,
-                        );
-                        let file_name = file
-                            .file_name()
-                            .map(|n| n.to_string_lossy().to_string())
-                            .unwrap_or_else(|| file.display().to_string());
-                        doc.add_bookmark(Some(parent_bookmark), file_name, page_index);
-                    }
+                    let parent_bookmark = get_or_create_folder_bookmark(
+                        &mut doc,
+                        &mut folder_bookmarks,
+                        source_code_bookmark.as_ref().unwrap(),
+                        file,
+                        first_page_id,
+                    );
+                    doc.add_bookmark(Some(parent_bookmark), result.bookmark_title, first_page_id);
                 }
             }
-
-            progress.inc(1);
         }
 
         progress.finish_with_message("Files rendered");
@@ -410,13 +481,8 @@ impl PDF {
         .with_context(|| "Failed to render table of contents")?;
         page_offset += num_toc_pages;
 
-        // adjust the page numbering of all our source file bookmarks because we inserted a TOC ahead of them
-        for entry in doc.outline.entries.iter_mut().skip(2) {
-            entry.borrow_mut().page_index += num_toc_pages;
-            if !entry.borrow().children.is_empty() {
-                offset_bookmark_page_indices(&mut entry.borrow_mut().children, num_toc_pages);
-            }
-        }
+        // note: with Id<Page>-based bookmarks, no offset adjustment is needed
+        // IDs remain stable when pages are inserted; resolution happens during write()
 
         // render headers and footers on all content pages
         let title = source.title.as_deref();
@@ -460,7 +526,7 @@ fn get_or_create_folder_bookmark(
     folder_bookmarks: &mut HashMap<PathBuf, Rc<RefCell<OutlineEntry>>>,
     root_bookmark: &Rc<RefCell<OutlineEntry>>,
     file_path: &Path,
-    page_index: usize,
+    page_id: Id<Page>,
 ) -> Rc<RefCell<OutlineEntry>> {
     let parent = match file_path.parent() {
         Some(p) if !p.as_os_str().is_empty() => p,
@@ -496,7 +562,7 @@ fn get_or_create_folder_bookmark(
             .map(|n| format!("{}/", n.to_string_lossy()))
             .unwrap_or_else(|| format!("{}/", ancestor.display()));
 
-        let bookmark = doc.add_bookmark(Some(parent_bookmark), folder_name, page_index);
+        let bookmark = doc.add_bookmark(Some(parent_bookmark), folder_name, page_id);
         folder_bookmarks.insert(ancestor.to_path_buf(), bookmark);
     }
 
@@ -504,14 +570,4 @@ fn get_or_create_folder_bookmark(
         .get(parent)
         .cloned()
         .unwrap_or_else(|| root_bookmark.clone())
-}
-
-fn offset_bookmark_page_indices(items: &mut [Rc<RefCell<OutlineEntry>>], offset_amount: usize) {
-    for item in items {
-        let has_children = !item.borrow().children.is_empty();
-        if has_children {
-            offset_bookmark_page_indices(&mut item.borrow_mut().children, offset_amount)
-        }
-        item.borrow_mut().page_index += offset_amount;
-    }
 }

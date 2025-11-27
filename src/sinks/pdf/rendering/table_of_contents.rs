@@ -174,8 +174,8 @@ pub fn render(
     skip_pages: usize,
     frontmatter_pages: HashMap<PathBuf, usize>,
     source_pages: HashMap<PathBuf, usize>,
-    git_history_page: Option<usize>,
-    tags_page: Option<usize>,
+    git_history_page: Option<Id<Page>>,
+    tags_page: Option<Id<Page>>,
     _commit_history_page_count: usize,
 ) -> Result<usize> {
     let page_size = config.page_size();
@@ -268,8 +268,11 @@ pub fn render(
         }
     }));
 
-    if let Some(git_history_page) = git_history_page {
-        let abs_page = git_history_page - skip_pages;
+    if let Some(git_history_page_id) = git_history_page {
+        let page_index = doc
+            .index_of_page(git_history_page_id)
+            .expect("commit history page exists");
+        let abs_page = page_index - skip_pages;
         // always the first content page of the section
         entries.push(TocDisplayEntry {
             text: "Commit History".to_string(),
@@ -279,8 +282,9 @@ pub fn render(
         });
     }
 
-    if let Some(tags_page_idx) = tags_page {
-        let abs_page = tags_page_idx - skip_pages;
+    if let Some(tags_page_id) = tags_page {
+        let page_index = doc.index_of_page(tags_page_id).expect("tags page exists");
+        let abs_page = page_index - skip_pages;
         // always the first content page of the section
         entries.push(TocDisplayEntry {
             text: "Tags".to_string(),

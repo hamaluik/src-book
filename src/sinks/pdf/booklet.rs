@@ -106,7 +106,7 @@ pub fn render_booklet(
     };
 
     // maps source image indices to booklet document image indices
-    let mut image_remap: HashMap<usize, usize> = HashMap::new();
+    let mut image_remap: HashMap<usize, Id<Image>> = HashMap::new();
 
     // create Form XObjects from each source page
     let progress = ProgressBar::new(source_doc.page_order.len() as u64);
@@ -150,24 +150,23 @@ pub fn render_booklet(
                     }
                 }
                 PageContents::Image(img) => {
-                    // remap image index or load from disk if not yet in booklet doc
-                    let new_index = if let Some(&idx) = image_remap.get(&img.image_index) {
-                        idx
-                    } else if let Some(path) = image_paths.get(&img.image_index) {
+                    // remap image ID or load from disk if not yet in booklet doc
+                    let new_id = if let Some(&cached_id) = image_remap.get(&img.image_id.index()) {
+                        cached_id
+                    } else if let Some(path) = image_paths.get(&img.image_id.index()) {
                         let image = Image::new_from_disk(path).with_context(|| {
                             format!("Failed to reload image '{}' for booklet", path.display())
                         })?;
                         let new_id = booklet_doc.add_image(image);
-                        let new_idx = new_id.index();
-                        image_remap.insert(img.image_index, new_idx);
-                        new_idx
+                        image_remap.insert(img.image_id.index(), new_id);
+                        new_id
                     } else {
                         // image path not recorded; skip this image
                         continue;
                     };
 
                     xobj.add_image(ImageLayout {
-                        image_index: new_index,
+                        image_id: new_id,
                         position: img.position,
                     });
                 }

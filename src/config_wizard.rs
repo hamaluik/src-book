@@ -937,7 +937,7 @@ pub fn run(args: &ConfigArgs) -> Result<()> {
                     .with_prompt("Pages per signature (must be divisible by 4)")
                     .default(default_sig_size)
                     .validate_with(|input: &u32| {
-                        if *input % 4 == 0 && *input > 0 {
+                        if (*input).is_multiple_of(4) && *input > 0 {
                             Ok(())
                         } else {
                             Err("Signature size must be a positive multiple of 4")

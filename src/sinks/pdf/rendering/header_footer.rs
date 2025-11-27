@@ -158,7 +158,7 @@ fn calculate_x_position(
     text_width: Pt,
 ) -> Pt {
     // even indices are right-hand (recto) pages in a bound book
-    let is_recto = page_index % 2 == 0;
+    let is_recto = page_index.is_multiple_of(2);
 
     match position {
         Position::Outer => {

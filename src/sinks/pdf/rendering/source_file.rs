@@ -3,6 +3,16 @@
 //! Renders source code files with line numbers, syntax highlighting based on file
 //! extension, and natural text wrapping. Binary files can be rendered as hex dumps
 //! (when enabled) or display a placeholder.
+//!
+//! ## Parallelisation-Ready Design
+//!
+//! The [`render()`] function returns a [`RenderResult`] containing `Vec<Page>` rather
+//! than adding pages directly to the document. This design enables parallel rendering:
+//! multiple files can be rendered concurrently (each producing independent pages), then
+//! their pages can be added to the document sequentially in the correct order.
+//!
+//! The function only requires immutable access to the document (`&Document`) for font
+//! metrics, making it safe to call from multiple threads with rayon's `par_iter()`.
 
 use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
@@ -17,11 +27,15 @@ use syntect::parsing::SyntaxSet;
 use syntect::util::LinesWithEndings;
 
 /// Result of rendering a source file.
+///
+/// Contains the rendered pages and metadata needed to create bookmarks.
+/// Pages are returned rather than added directly to the document, enabling
+/// parallel rendering of multiple files followed by sequential insertion.
 pub struct RenderResult {
-    /// Page index of the first page, or None if the file was empty
-    pub first_page: Option<usize>,
-    /// Number of pages rendered
-    pub page_count: usize,
+    /// Pages rendered for this file. May be empty for files with no content.
+    pub pages: Vec<Page>,
+    /// Title to use for the bookmark (typically the filename).
+    pub bookmark_title: String,
 }
 
 /// Render a source file with syntax highlighting.
@@ -31,10 +45,12 @@ pub struct RenderResult {
 /// as hex dumps (when `config.binary_hex.enabled` is enabled) or shown as a grey
 /// placeholder.
 ///
-/// Returns the first page index and number of pages rendered.
+/// Returns a [`RenderResult`] containing the rendered pages and bookmark title.
+/// Pages are returned rather than added to the document directly, enabling parallel
+/// rendering when used with rayon.
 pub fn render(
     config: &PDF,
-    doc: &mut Document,
+    doc: &Document,
     font_ids: &FontIds,
     path: &Path,
     ss: &SyntaxSet,
@@ -61,9 +77,7 @@ pub fn render(
                     &data[..]
                 };
 
-                return Ok(hex_dump::render(
-                    config, doc, font_ids, path, data, truncated, theme,
-                ));
+                return hex_dump::render(config, doc, font_ids, path, data, truncated, theme);
             }
             // fallback to placeholder
             ("<binary data>".to_string(), true)
@@ -165,8 +179,8 @@ pub fn render(
     } else {
         Pt(0.0)
     };
-    let mut first_page = None;
-    let mut page_count = 0;
+    let mut pages = Vec::new();
+    let mut page_index = 0;
     while !text.is_empty() {
         let margins = Margins::trbl(
             In(0.25).into(),
@@ -174,7 +188,7 @@ pub fn render(
             In(0.5).into(),
             In(0.25).into(),
         )
-        .with_gutter(In(0.25).into(), doc.page_order.len());
+        .with_gutter(In(0.25).into(), page_index);
         let page_size = config.page_size();
 
         let mut page = Page::new(page_size, Some(margins));
@@ -201,15 +215,17 @@ pub fn render(
         }
 
         layout::layout_text_naive(doc, &mut page, start, &mut text, wrap_width, bbox);
-        let page_id = doc.add_page(page);
-        page_count += 1;
-        if first_page.is_none() {
-            first_page = Some(doc.index_of_page(page_id).expect("page was just added"));
-        }
+        pages.push(page);
+        page_index += 1;
     }
 
+    let bookmark_title = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_else(|| path.display().to_string());
+
     Ok(RenderResult {
-        first_page,
-        page_count,
+        pages,
+        bookmark_title,
     })
 }

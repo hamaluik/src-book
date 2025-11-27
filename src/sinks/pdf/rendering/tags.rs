@@ -7,13 +7,14 @@ use crate::sinks::pdf::config::PDF;
 use crate::sinks::pdf::fonts::FontIds;
 use crate::source::Tag;
 use anyhow::Result;
+use pdf_gen::id_arena_crate::Id;
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
 
 /// Result of rendering the tags appendix section.
 pub struct TagsRenderResult {
-    /// Page index of the first content page, or None if no tags.
-    pub first_page: Option<usize>,
+    /// Page ID of the first content page, or None if no tags.
+    pub first_page: Option<Id<Page>>,
     /// Whether a blank page was inserted for recto alignment.
     pub blank_inserted: bool,
 }
@@ -181,7 +182,7 @@ pub fn render(
         layout::layout_text_naive(doc, &mut page, start, &mut text, wrap_width, bbox);
         let page_id = doc.add_page(page);
         if first_page.is_none() {
-            first_page = Some(doc.index_of_page(page_id).expect("page was just added"));
+            first_page = Some(page_id);
         }
     }
 

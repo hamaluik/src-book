@@ -61,7 +61,7 @@ pub struct PrintSheet {
 /// - etc.
 pub fn calculate_signature_sheets(signature_size: u32) -> Vec<PrintSheet> {
     assert!(
-        signature_size % 4 == 0,
+        signature_size.is_multiple_of(4),
         "signature size must be divisible by 4"
     );
     assert!(signature_size > 0, "signature size must be positive");

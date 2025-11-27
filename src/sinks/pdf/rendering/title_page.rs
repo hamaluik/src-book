@@ -182,10 +182,9 @@ pub fn render(
         let image = Image::new_from_disk(&image_path)?;
         let aspect_ratio = image.aspect_ratio();
         let image_id = doc.add_image(image);
-        let image_index = image_id.index();
 
         // track for booklet rendering
-        image_paths.insert(image_index, image_path.clone());
+        image_paths.insert(image_id.index(), image_path.clone());
 
         // calculate image size (constrain by max height and page width)
         let max_height = config.title_page.image_max_height_in * 72.0;
@@ -203,7 +202,7 @@ pub fn render(
             (Pt(w), Pt(h))
         };
 
-        Some((image_index, width, height))
+        Some((image_id, width, height))
     } else {
         None
     };
@@ -260,11 +259,11 @@ pub fn render(
     };
 
     // render image if present and position is Top
-    if let (Some((image_index, width, height)), Some(img_y)) = (&image_data, image_y) {
+    if let (Some((image_id, width, height)), Some(img_y)) = (&image_data, image_y) {
         if config.title_page.image_position == TitlePageImagePosition::Top {
             let x = (page_size.0 - *width) / 2.0;
             page.add_image(ImageLayout {
-                image_index: *image_index,
+                image_id: *image_id,
                 position: Rect {
                     x1: x,
                     y1: img_y - *height,
@@ -337,7 +336,7 @@ pub fn render(
     }
 
     // render image if position is Centre or Bottom
-    if let Some((image_index, width, height)) = &image_data {
+    if let Some((image_id, width, height)) = &image_data {
         let render_now = match config.title_page.image_position {
             TitlePageImagePosition::Top => false,
             TitlePageImagePosition::Centre => true,
@@ -351,7 +350,7 @@ pub fn render(
                 TitlePageImagePosition::Top => unreachable!(),
             };
             page.add_image(ImageLayout {
-                image_index: *image_index,
+                image_id: *image_id,
                 position: Rect {
                     x1: x,
                     y1: image_y,

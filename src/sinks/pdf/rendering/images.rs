@@ -7,6 +7,7 @@ use crate::sinks::pdf::fonts::FontIds;
 use crate::sinks::pdf::rendering::ImagePathMap;
 use anyhow::Result;
 use jiff::{tz::TimeZone, Timestamp};
+use pdf_gen::id_arena_crate::Id;
 use pdf_gen::layout::Margins;
 use pdf_gen::*;
 use std::path::Path;
@@ -20,17 +21,16 @@ pub fn render(
     font_ids: &FontIds,
     path: &Path,
     image_paths: &mut ImagePathMap,
-) -> Result<usize> {
+) -> Result<Id<Page>> {
     let subheading_size = Pt(config.fonts.subheading_pt);
     let small_size = Pt(config.fonts.small_pt);
 
     let image = Image::new_from_disk(path)?;
     let aspect_ratio = image.aspect_ratio();
     let image_id = doc.add_image(image);
-    let image_index = image_id.index();
 
     // record path for booklet rendering
-    image_paths.insert(image_index, path.to_path_buf());
+    image_paths.insert(image_id.index(), path.to_path_buf());
 
     let margins = Margins::trbl(
         In(0.25).into(),
@@ -61,7 +61,7 @@ pub fn render(
         + doc.fonts[font_ids.regular].line_height(small_size);
 
     page.add_image(ImageLayout {
-        image_index,
+        image_id,
         position: Rect {
             x1: x,
             y1: y,
@@ -92,8 +92,7 @@ pub fn render(
     });
 
     let page_id = doc.add_page(page);
-    let page_index = doc.index_of_page(page_id).expect("page was just added");
-    Ok(page_index)
+    Ok(page_id)
 }
 
 fn describe_image(image: &Image, path: &Path) -> (String, String) {
