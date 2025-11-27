@@ -53,6 +53,7 @@ source_files = [
     "src/sinks/pdf/rendering/table_of_contents.rs",
     "src/sinks/pdf/rendering/tags.rs",
     "src/sinks/pdf/rendering/title_page.rs",
+    "Cargo.lock",
     "build.rs",
     "logo.txt",
     "assets/fonts/FiraMono-Bold.ttf",
@@ -67,7 +68,7 @@ source_files = [
 user_names = []
 name = "Kenton Hamaluik"
 email = "kenton@hamaluik.ca"
-prominence = 49
+prominence = 51
 
 [pdf]
 outfile = "src-book.pdf"
@@ -85,11 +86,11 @@ inner_in = 0.25
 outer_in = 0.125
 
 [pdf.fonts]
-title_pt = 19.0
-heading_pt = 14.0
-subheading_pt = 7.0
-body_pt = 6.0
-small_pt = 5.0
+title_pt = 24.0
+heading_pt = 18.0
+subheading_pt = 9.0
+body_pt = 7.0
+small_pt = 6.0
 
 [pdf.header]
 template = "{file}"
@@ -99,7 +100,7 @@ rule = "Below"
 [pdf.footer]
 template = "{n}"
 position = "Outer"
-rule = "Above"
+rule = "None"
 
 [pdf.title_page]
 template = """```
@@ -171,7 +172,7 @@ enabled = true
 
 [pdf.tags_appendix]
 enabled = true
-order = "NewestFirst"
+order = "OldestFirst"
 
 [pdf.numbering.frontmatter]
 style = "RomanLower"
@@ -184,68 +185,9 @@ start = 1
 [pdf.numbering.commits]
 style = "Arabic"
 start = 1
-prefix = "A-"
+prefix = "A"
 
 [pdf.numbering.tags]
 style = "Arabic"
 start = 1
-prefix = "B-"
-
-[epub]
-outfile = "src-book.epub"
-theme = "Catppuccin Latte"
-
-[epub.cover]
-template = """
-{title}
-
-- by -
-
-{authors}"""
-image = ""
-
-[epub.colophon]
-template = """
-{title}
-
-by {authors}
-
-{remotes}
-
----
-
-Generated on {generated_date}
-by src-book v{tool_version}
-
-{licences}
-
----
-
-Statistics
-
-  {file_count} source files
-  {line_count} lines of code
-  {total_bytes}
-  {commit_count} commits ({date_range})
-
-{language_stats}
-
-Commit Activity
-
-{commit_chart}"""
-
-[epub.metadata]
-subject = ""
-keywords = ""
-language = "en"
-
-[epub.fonts]
-embed = true
-family = "SourceCodePro"
-
-[epub.inline_tags]
-enabled = true
-
-[epub.tags_appendix]
-enabled = true
-order = "NewestFirst"
+prefix = "B"

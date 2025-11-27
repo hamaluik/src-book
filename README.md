@@ -248,21 +248,21 @@ sheet_height_in = 8.5
 
 Headers, footers, title pages, and cover pages support these placeholders:
 
-| Placeholder        | Description                          | Available In            |
-|--------------------|--------------------------------------|-------------------------|
-| `{title}`          | Book title                           | All templates           |
-| `{authors}`        | Formatted author list                | Title, cover, colophon  |
-| `{licences}`       | Licence identifiers                  | Title, cover, colophon  |
-| `{date}`           | Current date                         | Title, cover            |
-| `{file}`           | Current file path                    | Header, footer          |
-| `{n}`              | Page number (section-formatted)      | Header, footer          |
-| `{total}`          | Section page count                   | Header, footer          |
-| `{remotes}`        | Git remote URLs                      | Colophon                |
-| `{file_count}`     | Number of files                      | Colophon                |
-| `{line_count}`     | Total lines of code                  | Colophon                |
-| `{commit_count}`   | Number of commits                    | Colophon                |
-| `{language_stats}` | Lines per language breakdown         | Colophon                |
-| `{commit_chart}`   | ASCII commit activity histogram      | Colophon                |
+| Placeholder        | Description                     | Available In           |
+|--------------------|---------------------------------|------------------------|
+| `{title}`          | Book title                      | All templates          |
+| `{authors}`        | Formatted author list           | Title, cover, colophon |
+| `{licences}`       | Licence identifiers             | Title, cover, colophon |
+| `{date}`           | Current date                    | Title, cover           |
+| `{file}`           | Current file path               | Header, footer         |
+| `{n}`              | Page number (section-formatted) | Header, footer         |
+| `{total}`          | Section page count              | Header, footer         |
+| `{remotes}`        | Git remote URLs                 | Colophon               |
+| `{file_count}`     | Number of files                 | Colophon               |
+| `{line_count}`     | Total lines of code             | Colophon               |
+| `{commit_count}`   | Number of commits               | Colophon               |
+| `{language_stats}` | Lines per language breakdown    | Colophon               |
+| `{commit_chart}`   | ASCII commit activity histogram | Colophon               |
 
 ## Available Themes
 
@@ -277,10 +277,10 @@ All themes are light-coloured, optimised for printing on white paper.
 
 ## Bundled Fonts
 
-| Font           | Variants                                |
-|----------------|-----------------------------------------|
-| SourceCodePro  | Regular, Bold, Italic, BoldItalic       |
-| FiraMono       | Regular, Bold (italic falls back)       |
+| Font          | Variants                          |
+|---------------|-----------------------------------|
+| SourceCodePro | Regular, Bold, Italic, BoldItalic |
+| FiraMono      | Regular, Bold (italic falls back) |
 
 ### Custom Fonts
 

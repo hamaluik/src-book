@@ -150,6 +150,10 @@ impl SectionNumbering {
 
 #[derive(Copy, Clone, Eq, PartialEq, Serialize, Deserialize, Debug)]
 pub enum SyntaxTheme {
+    #[serde(rename = "Catppuccin Latte")]
+    CatppuccinLatte,
+    #[serde(rename = "Rosé Pine Dawn")]
+    RosePineDawn,
     #[serde(rename = "Solarized (light)")]
     SolarizedLight,
     #[serde(rename = "OneHalfLight")]
@@ -158,10 +162,6 @@ pub enum SyntaxTheme {
     Gruvbox,
     #[serde(rename = "GitHub")]
     GitHub,
-    #[serde(rename = "Rosé Pine Dawn")]
-    RosePineDawn,
-    #[serde(rename = "Catppuccin Latte")]
-    CatppuccinLatte,
 }
 
 impl fmt::Display for SyntaxTheme {
@@ -173,23 +173,23 @@ impl fmt::Display for SyntaxTheme {
 impl SyntaxTheme {
     pub fn name(&self) -> &'static str {
         match self {
+            SyntaxTheme::CatppuccinLatte => "Catppuccin Latte",
+            SyntaxTheme::RosePineDawn => "Rosé Pine Dawn",
             SyntaxTheme::SolarizedLight => "Solarized (light)",
             SyntaxTheme::OneHalfLight => "OneHalfLight",
             SyntaxTheme::Gruvbox => "gruvbox (Light) (Hard)",
             SyntaxTheme::GitHub => "GitHub",
-            SyntaxTheme::RosePineDawn => "Rosé Pine Dawn",
-            SyntaxTheme::CatppuccinLatte => "Catppuccin Latte",
         }
     }
 
     pub fn all() -> &'static [SyntaxTheme] {
         &[
+            SyntaxTheme::CatppuccinLatte,
+            SyntaxTheme::RosePineDawn,
             SyntaxTheme::SolarizedLight,
             SyntaxTheme::OneHalfLight,
             SyntaxTheme::Gruvbox,
             SyntaxTheme::GitHub,
-            SyntaxTheme::RosePineDawn,
-            SyntaxTheme::CatppuccinLatte,
         ]
     }
 }
@@ -392,7 +392,7 @@ impl Default for FooterConfig {
         Self {
             template: "{n}".to_string(),
             position: Position::Outer,
-            rule: RulePosition::None,
+            rule: RulePosition::Above,
         }
     }
 }
@@ -498,10 +498,16 @@ impl Default for BinaryHexConfig {
 }
 
 /// Configuration for displaying tags inline with commits.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InlineTagsConfig {
     /// Show tag badges inline with commits in the commit history.
     pub enabled: bool,
+}
+
+impl Default for InlineTagsConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
 }
 
 /// Configuration for the tags appendix section.
@@ -516,8 +522,8 @@ pub struct TagsAppendixConfig {
 impl Default for TagsAppendixConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
-            order: crate::source::TagOrder::NewestFirst,
+            enabled: true,
+            order: crate::source::TagOrder::OldestFirst,
         }
     }
 }

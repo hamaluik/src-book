@@ -13,11 +13,11 @@ use serde::{Deserialize, Serialize};
 /// Controls how tags are sorted in the tags appendix.
 #[derive(Default, Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 pub enum TagOrder {
-    /// Most recent tags first (by commit date)
-    #[default]
-    NewestFirst,
     /// Oldest tags first (by commit date)
+    #[default]
     OldestFirst,
+    /// Most recent tags first (by commit date)
+    NewestFirst,
     /// Alphabetical by tag name
     Alphabetical,
     /// Reverse alphabetical by tag name
@@ -28,8 +28,8 @@ impl TagOrder {
     /// All available tag order options for selection UI.
     pub fn all() -> &'static [TagOrder] {
         &[
-            TagOrder::NewestFirst,
             TagOrder::OldestFirst,
+            TagOrder::NewestFirst,
             TagOrder::Alphabetical,
             TagOrder::AlphabeticalReverse,
         ]
@@ -39,8 +39,8 @@ impl TagOrder {
 impl std::fmt::Display for TagOrder {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TagOrder::NewestFirst => write!(f, "Newest first"),
             TagOrder::OldestFirst => write!(f, "Oldest first"),
+            TagOrder::NewestFirst => write!(f, "Newest first"),
             TagOrder::Alphabetical => write!(f, "Alphabetical"),
             TagOrder::AlphabeticalReverse => write!(f, "Alphabetical (reverse)"),
         }
@@ -140,11 +140,11 @@ impl Tag {
     /// Sorts tags according to the specified order.
     pub fn sort_tags(tags: &mut [Tag], order: TagOrder) {
         match order {
-            TagOrder::NewestFirst => {
-                tags.sort_by(|a, b| b.commit_date.cmp(&a.commit_date));
-            }
             TagOrder::OldestFirst => {
                 tags.sort_by(|a, b| a.commit_date.cmp(&b.commit_date));
+            }
+            TagOrder::NewestFirst => {
+                tags.sort_by(|a, b| b.commit_date.cmp(&a.commit_date));
             }
             TagOrder::Alphabetical => {
                 tags.sort_by(|a, b| a.name.cmp(&b.name));
